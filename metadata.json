@@ -1,0 +1,7 @@
+{
+  "name": "AMScout",
+  "description": "A social media platform for creators and scouts, featuring feeds, stories, reels, and group chats with a points-based publishing system.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
