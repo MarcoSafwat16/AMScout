@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Post, User } from '../types';
 import HeartIcon from './icons/HeartIcon';
@@ -11,10 +10,9 @@ import CrownIcon from './icons/CrownIcon';
 interface PostProps {
   post: Post;
   onViewProfile: (userId: string) => void;
-  currentUserId: string;
+  currentUser: User;
   onCommentClick: (post: Post) => void;
   onRepost: (post: Post) => void;
-  followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
   topUsers: string[];
 }
@@ -88,17 +86,16 @@ const PostMedia: React.FC<{ post: Post }> = ({ post }) => {
 const PostAuthorInfo: React.FC<{
   author: User;
   taggedUsers?: User[];
-  timestamp: string;
+  timestamp: any;
   onViewProfile: (userId: string) => void;
-  currentUserId: string;
-  followedUserIds: Set<string>;
+  currentUser: User;
   onToggleFollow: (userId: string) => void;
   isTopUser: boolean;
-}> = ({ author, taggedUsers = [], timestamp, onViewProfile, currentUserId, followedUserIds, onToggleFollow, isTopUser }) => {
+}> = ({ author, taggedUsers = [], timestamp, onViewProfile, currentUser, onToggleFollow, isTopUser }) => {
   const allUsersInPost = [author, ...taggedUsers];
   
-  const isFollowing = followedUserIds.has(author.id);
-  const isNotCurrentUser = author.id !== currentUserId;
+  const isFollowing = currentUser.following?.includes(author.id);
+  const isNotCurrentUser = author.id !== currentUser.id;
 
   const getTextualInfo = () => {
     const authorButton = (
@@ -149,14 +146,15 @@ const PostAuthorInfo: React.FC<{
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm truncate">{getTextualInfo()}</div>
-        <p className="text-xs text-gray-300 truncate">{timestamp}</p>
+        {/* Fix: Use the `timestamp` prop which is correctly passed to this component, instead of the undefined `post` variable. */}
+        <p className="text-xs text-gray-300 truncate">{timestamp?.toDate()?.toLocaleString() || 'Just now'}</p>
       </div>
     </div>
   );
 };
 
 
-const PostComponent: React.FC<PostProps> = ({ post, onViewProfile, currentUserId, onCommentClick, onRepost, followedUserIds, onToggleFollow, topUsers }) => {
+const PostComponent: React.FC<PostProps> = ({ post, onViewProfile, currentUser, onCommentClick, onRepost, onToggleFollow, topUsers }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   
@@ -171,7 +169,7 @@ const PostComponent: React.FC<PostProps> = ({ post, onViewProfile, currentUserId
         <div className="text-xs text-gray-400 font-semibold flex items-center gap-2 mb-2">
           <ShareIcon className="w-4 h-4" />
           <button onClick={() => onViewProfile(post.author.id)} className="hover:underline flex items-center gap-1">
-            {post.author.id === currentUserId ? 'You' : post.author.username}
+            {post.author.id === currentUser.id ? 'You' : post.author.username}
             {isAuthorTopUser(post.author.id) && <CrownIcon className="w-3 h-3 text-yellow-400" />}
           </button>
            shared
@@ -186,8 +184,7 @@ const PostComponent: React.FC<PostProps> = ({ post, onViewProfile, currentUserId
                 taggedUsers={originalPost.taggedUsers} 
                 timestamp={originalPost.timestamp} 
                 onViewProfile={onViewProfile} 
-                currentUserId={currentUserId}
-                followedUserIds={followedUserIds}
+                currentUser={currentUser}
                 onToggleFollow={onToggleFollow}
                 isTopUser={isAuthorTopUser(originalPost.author.id)}
             />
@@ -240,8 +237,7 @@ const PostComponent: React.FC<PostProps> = ({ post, onViewProfile, currentUserId
                 taggedUsers={post.taggedUsers} 
                 timestamp={post.timestamp} 
                 onViewProfile={onViewProfile} 
-                currentUserId={currentUserId}
-                followedUserIds={followedUserIds}
+                currentUser={currentUser}
                 onToggleFollow={onToggleFollow}
                 isTopUser={isAuthorTopUser(post.author.id)}
               />

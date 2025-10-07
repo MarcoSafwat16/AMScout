@@ -110,9 +110,10 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSwitchToLogin, users }) =
         
         const newUser: Omit<User, 'id'> = {
             ...userData,
-            avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/100`,
+            avatarUrl: `https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(formData.fullName)}`,
             points: 0,
             isAdmin: isFirstUser,
+            following: [],
         };
         
         // Save the extended user profile to Firestore

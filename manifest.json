@@ -4,12 +4,12 @@
   "name": "AMScout",
   "icons": [
     {
-      "src": "https://picsum.photos/192",
+      "src": "https://placehold.co/192x192/0a0809/e5e7eb.png?text=AMS",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://picsum.photos/512",
+      "src": "https://placehold.co/512x512/0a0809/e5e7eb.png?text=AMS",
       "type": "image/png",
       "sizes": "512x512"
     }

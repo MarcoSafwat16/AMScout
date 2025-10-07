@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Post, Comment, User } from '../types';
 import HeartIcon from './icons/HeartIcon';
@@ -6,12 +5,11 @@ import HeartIcon from './icons/HeartIcon';
 interface CommentItemProps {
   comment: Comment;
   onReplyClick: (comment: Comment) => void;
-  currentUserId: string;
-  followedUserIds: Set<string>;
+  currentUser: User;
   onToggleFollow: (userId: string) => void;
 }
 
-const CommentItem: React.FC<CommentItemProps> = ({ comment, onReplyClick, currentUserId, followedUserIds, onToggleFollow }) => {
+const CommentItem: React.FC<CommentItemProps> = ({ comment, onReplyClick, currentUser, onToggleFollow }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [likes, setLikes] = useState(comment.likes || 0);
 
@@ -20,8 +18,8 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onReplyClick, curren
     setLikes(l => isLiked ? l - 1 : l + 1);
   };
   
-  const isNotCurrentUser = comment.user.id !== currentUserId;
-  const isFollowing = followedUserIds.has(comment.user.id);
+  const isNotCurrentUser = comment.user.id !== currentUser.id;
+  const isFollowing = currentUser.following?.includes(comment.user.id);
 
   return (
     <div className="py-3">
@@ -50,7 +48,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onReplyClick, curren
         </div>
         {comment.replies && comment.replies.length > 0 && (
             <div className="pl-8 mt-2 space-y-2 border-l-2 border-gray-700 ml-4">
-                {comment.replies.map(reply => <CommentItem key={reply.id} comment={reply} onReplyClick={onReplyClick} currentUserId={currentUserId} followedUserIds={followedUserIds} onToggleFollow={onToggleFollow} />)}
+                {comment.replies.map(reply => <CommentItem key={reply.id} comment={reply} onReplyClick={onReplyClick} currentUser={currentUser} onToggleFollow={onToggleFollow} />)}
             </div>
         )}
     </div>
@@ -62,11 +60,10 @@ interface CommentSheetProps {
   onClose: () => void;
   onAddComment: (postId: string, text: string, parentId?: string) => void;
   currentUser: User;
-  followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
 }
 
-const CommentSheet: React.FC<CommentSheetProps> = ({ post, onClose, onAddComment, currentUser, followedUserIds, onToggleFollow }) => {
+const CommentSheet: React.FC<CommentSheetProps> = ({ post, onClose, onAddComment, currentUser, onToggleFollow }) => {
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +101,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({ post, onClose, onAddComment
         {/* Comments List */}
         <div className="flex-1 overflow-y-auto px-4 divide-y divide-gray-800/60">
           {post.comments && post.comments.length > 0 ? (
-             post.comments.map(comment => <CommentItem key={comment.id} comment={comment} onReplyClick={handleReplyClick} currentUserId={currentUser.id} followedUserIds={followedUserIds} onToggleFollow={onToggleFollow}/>)
+             post.comments.map(comment => <CommentItem key={comment.id} comment={comment} onReplyClick={handleReplyClick} currentUser={currentUser} onToggleFollow={onToggleFollow}/>)
           ) : (
             <div className="h-full flex items-center justify-center text-gray-500">
                 <p>No comments yet. Be the first!</p>

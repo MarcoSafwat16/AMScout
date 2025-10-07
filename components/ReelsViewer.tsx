@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Post, User } from '../types';
 import HeartIcon from './icons/HeartIcon';
@@ -26,12 +25,11 @@ interface ReelItemProps {
   onCommentClick: (post: Post) => void;
   onRepost: (post: Post) => void;
   currentUser: User;
-  followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
   topUsers: string[];
 }
 
-const ReelItem: React.FC<ReelItemProps> = ({ reel, isIntersecting, onViewProfile, onCommentClick, onRepost, currentUser, followedUserIds, onToggleFollow, topUsers }) => {
+const ReelItem: React.FC<ReelItemProps> = ({ reel, isIntersecting, onViewProfile, onCommentClick, onRepost, currentUser, onToggleFollow, topUsers }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -41,7 +39,7 @@ const ReelItem: React.FC<ReelItemProps> = ({ reel, isIntersecting, onViewProfile
   const [liveLikes, setLiveLikes] = useState<{ id: number; user: User; left: string; duration: string }[]>([]);
 
   const hasTags = reel.taggedUsers && reel.taggedUsers.length > 0;
-  const isFollowing = followedUserIds.has(reel.author.id);
+  const isFollowing = currentUser.following?.includes(reel.author.id);
   const isNotCurrentUser = reel.author.id !== currentUser.id;
   const isTopUser = topUsers.includes(reel.author.id);
   
@@ -217,12 +215,11 @@ interface ReelsViewerProps {
   onCommentClick: (post: Post) => void;
   onRepost: (post: Post) => void;
   currentUser: User;
-  followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
   topUsers: string[];
 }
 
-const ReelsViewer: React.FC<ReelsViewerProps> = ({ reels, onClose, onViewProfile, onCommentClick, onRepost, currentUser, followedUserIds, onToggleFollow, topUsers }) => {
+const ReelsViewer: React.FC<ReelsViewerProps> = ({ reels, onClose, onViewProfile, onCommentClick, onRepost, currentUser, onToggleFollow, topUsers }) => {
   const [visibleReelId, setVisibleReelId] = useState<string | null>(reels.length > 0 ? reels[0].id : null);
   const containerRef = useRef<HTMLDivElement>(null);
   const reelRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -279,7 +276,6 @@ const ReelsViewer: React.FC<ReelsViewerProps> = ({ reels, onClose, onViewProfile
                 onCommentClick={onCommentClick}
                 onRepost={onRepost}
                 currentUser={currentUser}
-                followedUserIds={followedUserIds}
                 onToggleFollow={onToggleFollow}
                 topUsers={topUsers}
               />

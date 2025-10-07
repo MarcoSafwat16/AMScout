@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Page, User } from '../types';
 import HomeIcon from './icons/HomeIcon';
@@ -33,8 +32,8 @@ const navItems: NavItem[] = [
   { page: Page.Home, label: 'Home', Icon: HomeIcon },
   { page: Page.Search, label: 'Search', Icon: SearchIcon },
   { page: Page.Reels, label: 'Reels', Icon: ReelsIcon },
-  { page: Page.Shop, label: 'Shop', Icon: ShopIcon },
-  { page: Page.Messages, label: 'Messages', Icon: MessageIcon },
+  { page: Page.Shop, label: 'AMS Shop', Icon: ShopIcon },
+  { page: Page.Messages, label: 'AMS Chat', Icon: MessageIcon },
   { page: Page.Notifications, label: 'Notifications', Icon: BellIcon },
   { page: Page.Profile, label: 'Profile', Icon: ProfileIcon },
 ];

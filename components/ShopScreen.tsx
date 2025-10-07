@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Product, User } from '../types';
 import CartIcon from './icons/CartIcon';
@@ -20,7 +19,7 @@ const ShopScreen: React.FC<ShopScreenProps> = ({ products, onProductClick, onCar
   return (
     <div className="w-full text-white">
       <header className="p-4 flex justify-between items-center sticky top-0 bg-[#1C1C1E]/80 backdrop-blur-sm z-10">
-        <h1 className="text-xl font-bold">Shop</h1>
+        <h1 className="text-xl font-bold">AMS Shop</h1>
         <div className="flex items-center gap-2">
             {currentUser.isAdmin && (
                 <button onClick={onAddProduct} className="p-2 rounded-full hover:bg-gray-800" title="Add New Product">

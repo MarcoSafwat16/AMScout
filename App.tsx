@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Page, User, Post, Comment, Message, Product, CartItem, ProductVariant, UserStories, Story, Reaction, Notification } from './types';
 import AppNavBar from './components/BottomNavBar';
@@ -5,7 +6,6 @@ import Feed from './components/Feed';
 import Header from './components/Header';
 import Composer from './components/Composer';
 import Profile from './components/Profile';
-import { mockPosts as initialMockPosts, mockUserStories as initialMockUserStories, mockGroupChatMessages, mockUserStickers, mockProducts as initialMockProducts, mockNotifications as initialMockNotifications } from './hooks/useMockData';
 import StoryTray from './components/StoryTray';
 import CommentSheet from './components/CommentSheet';
 import CreationChoiceModal from './components/CreationChoiceModal';
@@ -27,10 +27,10 @@ import NotificationsScreen from './components/ChatListScreen';
 import LoginScreen from './components/LoginScreen';
 import SignUpScreen from './components/SignUpScreen';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
+import EditProfileScreen from './components/EditProfileScreen';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
-
+import { doc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, writeBatch, query, orderBy, setDoc } from "firebase/firestore";
 
 type AuthPage = 'login' | 'signup' | 'forgotPassword';
 
@@ -46,87 +46,152 @@ const App: React.FC = () => {
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
   const [isReelsViewerOpen, setIsReelsViewerOpen] = useState(false);
   const [viewedProfileId, setViewedProfileId] = useState<string | null>(null);
-  const [posts, setPosts] = useState<Post[]>(initialMockPosts);
-  const [commentingOnPost, setCommentingOnPost] = useState<Post | null>(null);
-  const [followedUserIds, setFollowedUserIds] = useState<Set<string>>(new Set(['u2', 'u3']));
-  const [promoText, setPromoText] = useState("✨ Welcome to the new AMScout! Follow your favorite creators and discover amazing content. ✨");
-  const [groupChatMessages, setGroupChatMessages] = useState<Message[]>(mockGroupChatMessages);
-  const [userStickers, setUserStickers] = useState<string[]>(mockUserStickers);
-  const [isStickerCreatorOpen, setIsStickerCreatorOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(initialMockNotifications);
+  
+  // Firestore-backed state
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [userStories, setUserStories] = useState<UserStories[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [groupChatMessages, setGroupChatMessages] = useState<Message[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  const [commentingOnPost, setCommentingOnPost] = useState<Post | null>(null);
+  const [promoText, setPromoText] = useState("");
+  const [userStickers, setUserStickers] = useState<string[]>([]);
+  const [isStickerCreatorOpen, setIsStickerCreatorOpen] = useState(false);
+  
   // Stories State
-  const [userStories, setUserStories] = useState<UserStories[]>(initialMockUserStories);
   const [viewingStoriesOfUser, setViewingStoriesOfUser] = useState<UserStories | null>(null);
   const [isStoryCreatorOpen, setIsStoryCreatorOpen] = useState(false);
   
-  // E-commerce & Admin state
-  const [products, setProducts] = useState<Product[]>(initialMockProducts);
+  // E-commerce, Admin & Profile state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [viewedProductId, setViewedProductId] = useState<string | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isProductComposerOpen, setIsProductComposerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
-  const [dashboardPosition, setDashboardPosition] = useState({ x: window.innerWidth / 2 - 250, y: 100 });
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [dashboardPosition, setDashboardPosition] = useState({ x: window.innerWidth / 2 - 300, y: 100 });
 
+  // --- Start Data Fetching ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-            setCurrentUser({ id: userDoc.id, ...userDoc.data() } as User);
-        } else {
-            console.error("User data not found in Firestore.");
+        const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+          if (doc.exists()) {
+            setCurrentUser({ id: doc.id, ...doc.data() } as User);
+          } else {
+            console.error("Current user data not found in Firestore.");
             setCurrentUser(null);
-        }
+          }
+        });
+        setIsLoading(false);
+        return () => unsubscribeUser();
       } else {
         setCurrentUser(null);
+        setIsLoading(false);
       }
-      setIsLoading(false);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
+      const userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(userList);
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-        try {
-            const usersCollection = collection(db, "users");
-            const userSnapshot = await getDocs(usersCollection);
-            const userList = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-            setUsers(userList);
-        } catch (error) {
-            console.error("Error fetching users:", error);
-        }
+    if (!users.length) return;
+
+    const usersMap = new Map(users.map(u => [u.id, u]));
+    const q = query(collection(db, "posts"), orderBy("timestamp", "desc"));
+    const unsubscribePosts = onSnapshot(q, (snapshot) => {
+      const postsList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const author = usersMap.get(data.authorId);
+        const hydratedComments = (data.comments || []).map((c: any) => ({
+          ...c,
+          user: usersMap.get(c.userId)
+        }));
+        return { id: doc.id, ...data, author, comments: hydratedComments } as Post;
+      });
+      setPosts(postsList.filter(p => p.author));
+    });
+
+    const unsubscribeProducts = onSnapshot(collection(db, "products"), (snapshot) => {
+        const productsList = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return { id: doc.id, ...data, seller: usersMap.get(data.sellerId) } as Product;
+        });
+        setProducts(productsList.filter(p => p.seller));
+    });
+
+    const chatQuery = query(collection(db, "groupChat"), orderBy("timestamp", "asc"));
+    const unsubscribeChat = onSnapshot(chatQuery, (snapshot) => {
+        const messagesList = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return { id: doc.id, ...data, timestamp: data.timestamp?.toDate(), sender: usersMap.get(data.senderId) } as Message;
+        });
+        setGroupChatMessages(messagesList.filter(m => m.sender));
+    });
+    
+    const unsubscribeStories = onSnapshot(collection(db, "userStories"), (snapshot) => {
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const storiesList = snapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            const user = usersMap.get(docSnap.id);
+            if (!user) return null;
+            // FIX: The `story` object from Firestore has a Timestamp object, not a JS Date.
+            // Cast to `any` to allow calling `toDate()` before it's converted to the `Story` type.
+            const validStories = (data.stories || []).filter((story: any) => story.timestamp?.toDate() > twentyFourHoursAgo);
+            if (validStories.length === 0) return null;
+            return {
+                userId: docSnap.id,
+                user,
+                stories: validStories.map((s: any) => ({ ...s, timestamp: s.timestamp.toDate() })),
+                hasUnseen: true, // Placeholder for unseen logic
+            } as UserStories;
+        }).filter((s): s is UserStories => s !== null);
+        setUserStories(storiesList);
+    });
+
+    return () => {
+      unsubscribePosts();
+      unsubscribeProducts();
+      unsubscribeChat();
+      unsubscribeStories();
     };
-    fetchUsers();
-  }, [currentUser]); // Refetch users when auth state changes (e.g., new user signs up)
+  }, [users]);
+  // --- End Data Fetching ---
 
-
-  const topUsers = useMemo(() => {
-    return [...users]
-        .sort((a, b) => (b.points || 0) - (a.points || 0))
-        .slice(0, 3)
-        .map(u => u.id);
+  const { topUsers, onlineUsersCount } = useMemo(() => {
+    const sorted = [...users].sort((a, b) => (b.points || 0) - (a.points || 0));
+    const top = sorted.slice(0, 3).map(u => u.id);
+    const online = users.filter(u => u.isOnline).length;
+    return { topUsers: top, onlineUsersCount: online };
   }, [users]);
 
-  const handleUpdateUserPoints = useCallback((userId: string, pointsToAdd: number) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, points: (u.points || 0) + pointsToAdd } : u));
+  const handleUpdateUserPoints = useCallback(async (userId: string, pointsToAdd: number) => {
+      const userRef = doc(db, "users", userId);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+          const currentPoints = userDoc.data().points || 0;
+          await updateDoc(userRef, { points: currentPoints + pointsToAdd });
+      }
   }, []);
 
-  // --- Start Auth Handlers ---
   const handleLogout = () => {
     signOut(auth).catch(error => console.error("Logout failed", error));
   }
-  // --- End Auth Handlers ---
-
-
-  // --- Start Story Handlers ---
+  
   const handleViewStories = useCallback((userStoriesToShow: UserStories) => {
     if (!currentUser) return;
     setViewingStoriesOfUser(userStoriesToShow);
-    setUserStories(prev => prev.map(us => us.user.id === userStoriesToShow.user.id ? {...us, hasUnseen: false} : us));
   }, [currentUser]);
 
   const handleCloseStoryViewer = useCallback(() => setViewingStoriesOfUser(null), []);
@@ -145,146 +210,72 @@ const App: React.FC = () => {
   const handleOpenStoryCreator = () => setIsStoryCreatorOpen(true);
   const handleCloseStoryCreator = () => setIsStoryCreatorOpen(false);
   
-  const handleAddStory = useCallback((imageDataUrl: string) => {
-     if (!currentUser) return;
-     const newStory: Story = {
-       id: `s${Date.now()}`,
-       contentUrl: imageDataUrl,
-       contentType: 'image',
-       duration: 5,
-       timestamp: new Date(),
-       comments: [],
-       reactions: [],
-     };
-
-     setUserStories(prev => {
-       const currentUserStoriesIndex = prev.findIndex(us => us.user.id === currentUser.id);
-       if (currentUserStoriesIndex > -1) {
-         const updatedStories = [...prev];
-         const currentUserStories = updatedStories[currentUserStoriesIndex];
-         updatedStories[currentUserStoriesIndex] = {
-           ...currentUserStories,
-           stories: [...currentUserStories.stories, newStory],
-           hasUnseen: false, 
-         };
-         return updatedStories;
-       } else {
-         const newUserStory: UserStories = {
-            user: currentUser,
-            stories: [newStory],
-            hasUnseen: false,
-         };
-         return [newUserStory, ...prev];
-       }
-     });
-     
-     handleCloseStoryCreator();
-     const updatedUserStories = userStories.find(us => us.user.id === currentUser.id);
-     const stories = updatedUserStories ? [...updatedUserStories.stories, newStory] : [newStory];
-     setViewingStoriesOfUser({ user: currentUser, stories, hasUnseen: false });
-
-  }, [currentUser, userStories]);
+  const handleAddStory = useCallback(async (imageDataUrl: string) => {
+    if (!currentUser) return;
+    // FIX: Removed incorrect type annotation. The `id` property was disallowed and the `timestamp` property had an incompatible type (Date vs Firestore's serverTimestamp). Type inference will handle this correctly for Firestore.
+    const newStory = {
+        id: `s_${Date.now()}`,
+        contentUrl: imageDataUrl, // In a real app, upload to storage first.
+        contentType: 'image',
+        duration: 7, // 7 seconds
+        timestamp: serverTimestamp(),
+    };
+    const storyRef = doc(db, "userStories", currentUser.id);
+    const docSnap = await getDoc(storyRef);
+    if (docSnap.exists()) {
+        await updateDoc(storyRef, { stories: arrayUnion(newStory) });
+    } else {
+        await setDoc(storyRef, { stories: [newStory] });
+    }
+    handleCloseStoryCreator();
+  }, [currentUser]);
 
   const handleAddStoryComment = useCallback((storyId: string, commentText: string, authorId: string) => {
-    if (!currentUser) return;
-    const newComment: Omit<Comment, 'replies' | 'likes'> = {
-      id: `sc${Date.now()}`,
-      user: currentUser,
-      text: commentText,
-    };
-
-    let updatedViewingUserStories: UserStories | null = null;
-
-    const updatedUserStories = userStories.map(userStory => {
-      const storyIndex = userStory.stories.findIndex(s => s.id === storyId);
-      if (storyIndex > -1) {
-        const updatedStories = [...userStory.stories];
-        const targetStory = updatedStories[storyIndex];
-        updatedStories[storyIndex] = {
-          ...targetStory,
-          comments: [...(targetStory.comments || []), newComment as Comment],
-        };
-        const finalUserStory = { ...userStory, stories: updatedStories };
-        if (userStory.user.id === viewingStoriesOfUser?.user.id) {
-            updatedViewingUserStories = finalUserStory;
-        }
-        return finalUserStory;
-      }
-      return userStory;
-    });
-
-    setUserStories(updatedUserStories);
-    if(updatedViewingUserStories) {
-        setViewingStoriesOfUser(updatedViewingUserStories);
-    }
-    
+    console.log("Adding story comment to Firestore is not yet implemented.");
     handleUpdateUserPoints(authorId, 5);
-  }, [currentUser, userStories, viewingStoriesOfUser?.user.id, handleUpdateUserPoints]);
+  }, [handleUpdateUserPoints]);
   
   const handleAddStoryReaction = useCallback((storyId: string, authorId: string) => {
+    console.log("Adding story reaction to Firestore is not yet implemented.");
+    handleUpdateUserPoints(authorId, 2);
+  }, [handleUpdateUserPoints]);
+  
+  const handleUpdateProfile = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
-    const newReaction: Reaction = { user: currentUser, type: 'like' };
-    
-    let updatedViewingUserStories: UserStories | null = null;
-
-    const updatedUserStories = userStories.map(userStory => {
-      const storyIndex = userStory.stories.findIndex(s => s.id === storyId);
-      if (storyIndex > -1) {
-        const updatedStories = [...userStory.stories];
-        const targetStory = updatedStories[storyIndex];
-        
-        const existingReaction = targetStory.reactions?.find(r => r.user.id === currentUser.id);
-        if (existingReaction) return userStory;
-        
-        updatedStories[storyIndex] = {
-          ...targetStory,
-          reactions: [...(targetStory.reactions || []), newReaction],
-        };
-
-        const finalUserStory = { ...userStory, stories: updatedStories };
-        if (userStory.user.id === viewingStoriesOfUser?.user.id) {
-            updatedViewingUserStories = finalUserStory;
-        }
-        
-        handleUpdateUserPoints(authorId, 2);
-        
-        return finalUserStory;
-      }
-      return userStory;
-    });
-
-    setUserStories(updatedUserStories);
-    if(updatedViewingUserStories) {
-        setViewingStoriesOfUser(updatedViewingUserStories);
-    }
-  }, [currentUser, userStories, viewingStoriesOfUser?.user.id, handleUpdateUserPoints]);
-
-  // --- End Story Handlers ---
-  
-  // --- Start Admin Handlers ---
-  const handleToggleAdmin = (userId: string) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, isAdmin: !u.isAdmin } : u));
+    const userRef = doc(db, "users", currentUser.id);
+    await updateDoc(userRef, updatedData);
+    setIsEditProfileOpen(false);
   };
 
-  const handleToggleBlock = (userId: string) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, isBlocked: !u.isBlocked } : u));
+  const handleToggleAdmin = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    await updateDoc(doc(db, "users", userId), { isAdmin: !user.isAdmin });
+  };
+
+  const handleToggleBlock = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    await updateDoc(doc(db, "users", userId), { isBlocked: !user.isBlocked });
   };
   
-  const handleToggleMute = (userId: string) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, isMuted: !u.isMuted } : u));
+  const handleToggleMute = async (userId: string) => {
+     const user = users.find(u => u.id === userId);
+    if (!user) return;
+    await updateDoc(doc(db, "users", userId), { isMuted: !user.isMuted });
   };
 
-  const handleAdminUpdateUserPoints = (userId: string, newPoints: number) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? { ...u, points: Math.max(0, newPoints) } : u));
+  const handleAdminUpdateUserPoints = async (userId: string, newPoints: number) => {
+    await updateDoc(doc(db, "users", userId), { points: Math.max(0, newPoints) });
   };
   
-  const handleDeleteChatMessage = (messageId: string) => {
-    setGroupChatMessages(prev => prev.filter(msg => msg.id !== messageId));
+  const handleDeleteChatMessage = async (messageId: string) => {
+    await deleteDoc(doc(db, "groupChat", messageId));
   };
 
-  const handleDeletePost = (postId: string) => {
-    if(window.confirm('Are you sure you want to delete this content?')) {
-        setPosts(prev => prev.filter(p => p.id !== postId));
+  const handleDeletePost = async (postId: string) => {
+    if(window.confirm('Are you sure you want to delete this content permanently?')) {
+        await deleteDoc(doc(db, "posts", postId));
     }
   }
 
@@ -297,35 +288,29 @@ const App: React.FC = () => {
     setIsProductComposerOpen(false);
   };
 
-  const handleAddProduct = (productData: Omit<Product, 'id' | 'seller'>) => {
+  const handleAddProduct = async (productData: Omit<Product, 'id' | 'seller'>) => {
     if (!currentUser) return;
-    const newProduct: Product = {
-        ...productData,
-        id: `prod${Date.now()}`,
-        seller: currentUser,
-    };
-    setProducts(prev => [newProduct, ...prev]);
+    await addDoc(collection(db, "products"), { ...productData, sellerId: currentUser.id });
     handleCloseProductComposer();
   };
 
-  const handleUpdateProduct = (productId: string, productData: Omit<Product, 'id' | 'seller'>) => {
+  const handleUpdateProduct = async (productId: string, productData: Omit<Product, 'id' | 'seller'>) => {
     if (!currentUser) return;
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...productData, seller: currentUser } : p));
+    await updateDoc(doc(db, "products", productId), { ...productData, sellerId: currentUser.id });
     handleCloseProductComposer();
   };
 
-  const handleDeleteProduct = (productId: string) => {
+  const handleDeleteProduct = async (productId: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
-        setProducts(prev => prev.filter(p => p.id !== productId));
+        await deleteDoc(doc(db, "products", productId));
     }
   };
 
   const handleUpdatePromoText = (newText: string) => {
     setPromoText(newText);
+    console.log("Promo text updated locally. Firestore implementation needed for persistence.");
   };
-  // --- End Admin Handlers ---
 
-  // Shop Handlers
   const handleViewProduct = useCallback((productId: string) => setViewedProductId(productId), []);
   const handleCloseProduct = useCallback(() => setViewedProductId(null), []);
   const handleOpenCart = useCallback(() => setIsCartOpen(true), []);
@@ -361,18 +346,14 @@ const App: React.FC = () => {
     setIsCartOpen(false);
   }, [cart]);
 
-
-  const handleToggleFollow = useCallback((userIdToToggle: string) => {
-    setFollowedUserIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(userIdToToggle)) {
-        newSet.delete(userIdToToggle);
-      } else {
-        newSet.add(userIdToToggle);
-      }
-      return newSet;
+  const handleToggleFollow = useCallback(async (userIdToToggle: string) => {
+    if (!currentUser) return;
+    const userDocRef = doc(db, "users", currentUser.id);
+    const isFollowing = currentUser.following?.includes(userIdToToggle);
+    await updateDoc(userDocRef, {
+      following: isFollowing ? arrayRemove(userIdToToggle) : arrayUnion(userIdToToggle)
     });
-  }, []);
+  }, [currentUser]);
   
   const openChoiceModal = useCallback(() => setIsChoiceModalOpen(true), []);
   const closeChoiceModal = useCallback(() => setIsChoiceModalOpen(false), []);
@@ -390,60 +371,49 @@ const App: React.FC = () => {
   const closeReelComposer = useCallback(() => setIsReelComposerOpen(false), []);
 
 
-  const handleAddPost = useCallback((caption: string, mediaFile: File | null, taggedUsernames: string[]) => {
+  const handleAddPost = useCallback(async (caption: string, mediaFile: File | null, taggedUsernames: string[]) => {
     if (!currentUser) return;
     let imageUrl: string | undefined = undefined;
     let videoUrl: string | undefined = undefined;
-
     if (mediaFile) {
         const url = URL.createObjectURL(mediaFile);
-        if (mediaFile.type.startsWith('image/')) {
-            imageUrl = url;
-        } else if (mediaFile.type.startsWith('video/')) {
-            videoUrl = url;
-        }
+        if (mediaFile.type.startsWith('image/')) imageUrl = url;
+        else if (mediaFile.type.startsWith('video/')) videoUrl = url;
     }
-    
     const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
-
-    const newPost: Post = {
-      id: `p${Date.now()}`,
-      author: currentUser,
+    const newPost = {
+      authorId: currentUser.id,
       caption,
       imageUrl,
       videoUrl,
-      taggedUsers,
+      taggedUsers: taggedUsers.map(u => u.id),
       likes: 0,
       reposts: 0,
       comments: [],
-      timestamp: 'Just now',
+      timestamp: serverTimestamp(),
       type: 'post',
     };
-
-    setPosts(prevPosts => [newPost, ...prevPosts]);
+    await addDoc(collection(db, "posts"), newPost);
     closeComposer();
     setActivePage(Page.Home);
   }, [currentUser, closeComposer, users]);
 
-  const handleAddReel = useCallback((videoFile: File, caption: string, taggedUsernames: string[]) => {
+  const handleAddReel = useCallback(async (videoFile: File, caption: string, taggedUsernames: string[]) => {
      if (!currentUser) return;
      const videoUrl = URL.createObjectURL(videoFile);
-     const taggedUsers = users.filter(user => user.username.toLowerCase().includes(user.username.toLowerCase()));
-
-     const newReel: Post = {
-        id: `r${Date.now()}`,
-        author: currentUser,
+     const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
+     const newReel = {
+        authorId: currentUser.id,
         caption,
         videoUrl,
-        taggedUsers,
+        taggedUsers: taggedUsers.map(u => u.id),
         likes: 0,
         reposts: 0,
         comments: [],
-        timestamp: 'Just now',
+        timestamp: serverTimestamp(),
         type: 'reel',
      };
-
-     setPosts(prevPosts => [newReel, ...prevPosts]);
+     await addDoc(collection(db, "posts"), newReel);
      closeReelComposer();
      setIsReelsViewerOpen(true);
   }, [currentUser, closeReelComposer, users]);
@@ -451,27 +421,7 @@ const App: React.FC = () => {
 
   const handleRepost = useCallback((postToRepost: Post) => {
     if (!currentUser) return;
-    setPosts(prevPosts => {
-        const updatedPosts = prevPosts.map(p => {
-           const originalPost = p.originalPost || p;
-           if (originalPost.id === postToRepost.id) {
-               return { ...p, reposts: p.reposts + 1 };
-           }
-           return p;
-        });
-        
-        const newRepost: Post = {
-          id: `p${Date.now()}`,
-          author: currentUser,
-          caption: '', // Simple repost
-          likes: 0,
-          reposts: 0,
-          comments: [],
-          timestamp: 'Just now',
-          originalPost: postToRepost,
-        };
-        return [newRepost, ...updatedPosts];
-    });
+    console.log("Reposting to Firestore is not yet implemented.");
   }, [currentUser]);
 
   const handleViewProfile = useCallback((userId: string) => {
@@ -503,48 +453,26 @@ const App: React.FC = () => {
     setCommentingOnPost(null);
   }, []);
 
-  const handleAddComment = useCallback((postId: string, text: string, parentId?: string) => {
+  const handleAddComment = useCallback(async (postId: string, text: string, parentId?: string) => {
     if (!currentUser) return;
-    const newComment: Comment = {
+    const newComment: Omit<Comment, 'user'|'replies'> = {
       id: `c${Date.now()}`,
-      user: currentUser,
+      userId: currentUser.id,
       text,
       likes: 0,
-      replies: [],
     };
-
-    const addReplyToComment = (comments: Comment[], pId: string): Comment[] => {
-      return comments.map(comment => {
-        if (comment.id === pId) {
-          return { ...comment, replies: [newComment, ...(comment.replies || [])] };
-        }
-        if (comment.replies && comment.replies.length > 0) {
-          return { ...comment, replies: addReplyToComment(comment.replies, pId) };
-        }
-        return comment;
-      });
-    };
-
-    setPosts(currentPosts => currentPosts.map(p => {
-      if (p.id === postId) {
-        const updatedComments = parentId ? addReplyToComment(p.comments, parentId) : [newComment, ...p.comments];
-        const updatedPost = { ...p, comments: updatedComments };
-        setCommentingOnPost(updatedPost);
-        return updatedPost;
-      }
-      return p;
-    }));
+    const postRef = doc(db, "posts", postId);
+    await updateDoc(postRef, { comments: arrayUnion(newComment) });
   }, [currentUser]);
 
-  const handleSendMessage = useCallback((messageContent: Omit<Message, 'sender' | 'id' | 'timestamp'>) => {
+  const handleSendMessage = useCallback(async (messageContent: Omit<Message, 'sender' | 'id' | 'timestamp'>) => {
     if (!currentUser) return;
-    const newMessage: Message = {
-      id: `m${Date.now()}`,
-      sender: currentUser,
+    const newMessage = {
+      senderId: currentUser.id,
       ...messageContent,
-      timestamp: new Date(),
+      timestamp: serverTimestamp(),
     };
-    setGroupChatMessages(prevMessages => [...prevMessages, newMessage]);
+    await addDoc(collection(db, "groupChat"), newMessage);
   }, [currentUser]);
 
   const handleCreateSticker = useCallback((stickerDataUrl: string) => {
@@ -552,16 +480,17 @@ const App: React.FC = () => {
     setIsStickerCreatorOpen(false);
   }, []);
 
-
   const sortedPosts = useMemo(() => {
     return [...posts].sort((a, b) => {
-        const aIsFollowed = followedUserIds.has(a.author.id);
-        const bIsFollowed = followedUserIds.has(b.author.id);
+        const aIsFollowed = currentUser?.following?.includes(a.author.id);
+        const bIsFollowed = currentUser?.following?.includes(b.author.id);
         if (aIsFollowed && !bIsFollowed) return -1;
         if (!aIsFollowed && bIsFollowed) return 1;
-        return 0; 
+        const aTimestamp = a.timestamp?.seconds || 0;
+        const bTimestamp = b.timestamp?.seconds || 0;
+        return bTimestamp - aTimestamp;
     });
-  }, [posts, followedUserIds]);
+  }, [posts, currentUser]);
 
   const reels = useMemo(() => posts.filter(p => p.type === 'reel'), [posts]);
   
@@ -616,7 +545,7 @@ const App: React.FC = () => {
             <Header onNotificationClick={() => setActivePage(Page.Notifications)} onSearchClick={() => setActivePage(Page.Search)} />
             <StoryTray userStories={userStories} onViewStories={handleViewStories} currentUser={currentUser} onAddStory={handleOpenStoryCreator} topUsers={topUsers}/>
             <PromoBanner text={promoText} />
-            <Feed posts={sortedPosts} onViewProfile={handleViewProfile} currentUserId={currentUser.id} onCommentClick={handleOpenComments} onRepost={handleRepost} followedUserIds={followedUserIds} onToggleFollow={handleToggleFollow} topUsers={topUsers} />
+            <Feed posts={sortedPosts} onViewProfile={handleViewProfile} currentUser={currentUser} onCommentClick={handleOpenComments} onRepost={handleRepost} onToggleFollow={handleToggleFollow} topUsers={topUsers} />
         </>;
       case Page.Search:
         return <>
@@ -629,9 +558,9 @@ const App: React.FC = () => {
             <NotificationsScreen notifications={notifications} onViewProfile={handleViewProfile} />
         </>;
       case Page.Profile:
-        return <Profile users={users} posts={posts} viewedProfileId={viewedProfileId} currentUserId={currentUser.id} onGoBack={handleGoHome} onViewProfile={handleViewProfile} onCommentClick={handleOpenComments} onRepost={handleRepost} followedUserIds={followedUserIds} onToggleFollow={handleToggleFollow} topUsers={topUsers} onLogout={handleLogout} />;
+        return <Profile users={users} posts={posts} viewedProfileId={viewedProfileId} currentUser={currentUser} onGoBack={handleGoHome} onViewProfile={handleViewProfile} onCommentClick={handleOpenComments} onRepost={handleRepost} onToggleFollow={handleToggleFollow} topUsers={topUsers} onLogout={handleLogout} onEditProfile={() => setIsEditProfileOpen(true)} />;
       case Page.Messages:
-        return <ChatScreen messages={groupChatMessages} currentUser={currentUser} onSendMessage={handleSendMessage} onGoBack={handleGoHome} userStickers={userStickers} onOpenStickerCreator={() => setIsStickerCreatorOpen(true)} allUsers={users} topUsers={topUsers} />;
+        return <ChatScreen messages={groupChatMessages} currentUser={currentUser} onSendMessage={handleSendMessage} onGoBack={handleGoHome} userStickers={userStickers} onOpenStickerCreator={() => setIsStickerCreatorOpen(true)} allUsers={users} topUsers={topUsers} onlineMembersCount={onlineUsersCount} />;
       case Page.Shop:
         return <ShopScreen products={filteredProducts} onProductClick={handleViewProduct} onCartClick={handleOpenCart} cartItemCount={cart.reduce((sum, item) => sum + item.quantity, 0)} currentUser={currentUser} onAddProduct={() => handleOpenProductComposer(null)} categories={allCategories} activeCategory={activeShopCategory} onSelectCategory={setActiveShopCategory} />;
       default:
@@ -641,19 +570,21 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container bg-transparent min-h-screen">
-      <AppNavBar 
-          activePage={activePage} 
-          setActivePage={handleSetActivePage} 
-          onComposeClick={openChoiceModal}
-          currentUser={currentUser}
-      />
+      {activePage !== Page.Messages && 
+        <AppNavBar 
+            activePage={activePage} 
+            setActivePage={handleSetActivePage} 
+            onComposeClick={openChoiceModal}
+            currentUser={currentUser}
+        />
+      }
       
       <main className="app-main-content w-full">
         {renderContent()}
       </main>
 
-      {/* MODALS & OVERLAYS */}
-       {isStoryCreatorOpen && <StoryCreator onClose={handleCloseStoryCreator} onStoryCreated={handleAddStory} />}
+      {isEditProfileOpen && <EditProfileScreen currentUser={currentUser} onClose={() => setIsEditProfileOpen(false)} onSave={handleUpdateProfile} />}
+      {isStoryCreatorOpen && <StoryCreator onClose={handleCloseStoryCreator} onStoryCreated={handleAddStory} />}
        {viewingStoriesOfUser && (
         <StoryViewer 
             userStories={viewingStoriesOfUser}
@@ -703,7 +634,6 @@ const App: React.FC = () => {
           onCommentClick={handleOpenComments}
           onRepost={handleRepost}
           currentUser={currentUser}
-          followedUserIds={followedUserIds}
           onToggleFollow={handleToggleFollow}
           topUsers={topUsers}
         />
@@ -717,12 +647,10 @@ const App: React.FC = () => {
             onClose={handleCloseComments}
             onAddComment={handleAddComment}
             currentUser={currentUser}
-            followedUserIds={followedUserIds}
             onToggleFollow={handleToggleFollow}
         />
       }
       
-      {/* Persistent UI */}
       {currentUser.isAdmin && (
          <button
             onClick={() => setIsAdminDashboardOpen(prev => !prev)}

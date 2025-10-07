@@ -49,7 +49,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const [promoText, setPromoText] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const dragStartOffset = useRef({ x: 0, y: 0 });
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const { onlineUsersCount, totalSales } = useMemo(() => {
         const onlineCount = users.filter(u => u.isOnline).length;
         const sales = (products.reduce((sum, p) => sum + p.price, 0) * 3.5).toFixed(2);
@@ -57,6 +64,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     }, [users, products]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isMobile) return;
         setIsDragging(true);
         dragStartOffset.current = {
             x: e.clientX - position.x,
@@ -273,11 +281,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     return (
         <div 
-            className="fixed w-[600px] max-w-[95vw] h-[75vh] bg-zinc-900/80 backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl flex flex-col z-50 text-white"
-            style={{ top: position.y, left: position.x }}
+            className="fixed inset-0 w-full h-full bg-zinc-900/80 backdrop-blur-lg flex flex-col z-50 text-white md:inset-auto md:w-[600px] md:max-w-[95vw] md:h-[75vh] md:border md:border-white/10 md:rounded-2xl md:shadow-2xl"
+            style={isMobile ? {} : { top: position.y, left: position.x }}
         >
             <header 
-                className="p-3 flex justify-between items-center border-b border-gray-700 cursor-move"
+                className={`p-3 flex justify-between items-center border-b border-gray-700 ${!isMobile ? 'cursor-move' : ''}`}
                 onMouseDown={handleMouseDown}
             >
                 <h1 className="text-lg font-bold">Admin Dashboard</h1>

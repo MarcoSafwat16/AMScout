@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   username: string;
@@ -14,10 +13,12 @@ export interface User {
   isBlocked?: boolean;
   isMuted?: boolean; // "View-only" ban
   points?: number;
+  following?: string[];
 }
 
 export interface Comment {
   id: string;
+  userId: string;
   user: User;
   text: string;
   likes?: number;
@@ -26,6 +27,7 @@ export interface Comment {
 
 export interface Post {
   id: string;
+  authorId: string;
   author: User;
   imageUrl?: string;
   videoUrl?: string;
@@ -33,7 +35,7 @@ export interface Post {
   likes: number;
   reposts: number;
   comments: Comment[];
-  timestamp: string;
+  timestamp: any; // Can be Date or Firebase Timestamp
   originalPost?: Post;
   taggedUsers?: User[];
   type?: 'post' | 'reel';
@@ -41,6 +43,7 @@ export interface Post {
 }
 
 export interface Reaction {
+  userId: string;
   user: User;
   type: 'like';
 }
@@ -56,6 +59,7 @@ export interface Story {
 }
 
 export interface UserStories {
+  userId: string;
   user: User;
   stories: Story[];
   hasUnseen: boolean;
@@ -63,6 +67,7 @@ export interface UserStories {
 
 export interface Message {
   id: string;
+  senderId: string;
   sender: User;
   text?: string;
   imageUrl?: string;
@@ -82,6 +87,7 @@ export interface Product {
   description: string;
   price: number;
   imageUrls: string[];
+  sellerId: string;
   seller: User;
   category: string;
   variants: {
@@ -99,6 +105,7 @@ export interface CartItem {
 export interface Notification {
     id: string;
     type: 'like' | 'comment' | 'follow';
+    userId: string;
     user: User; // The user who performed the action
     post?: Post; // The post that was liked or commented on
     timestamp: string;

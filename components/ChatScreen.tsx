@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { User, Message } from '../types';
 import MessageInput from './MessageInput';
@@ -13,9 +12,10 @@ interface ChatScreenProps {
   onOpenStickerCreator: () => void;
   allUsers: User[];
   topUsers: string[];
+  onlineMembersCount: number;
 }
 
-const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMessage, onGoBack, userStickers, onOpenStickerCreator, allUsers, topUsers }) => {
+const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMessage, onGoBack, userStickers, onOpenStickerCreator, allUsers, topUsers, onlineMembersCount }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const totalMembers = allUsers.length;
   
@@ -34,7 +34,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMe
     const fetchSuggestions = async () => {
         if (messages.length > 0) {
             setIsLoadingSuggestions(true);
-            // Create a concise history for the AI model
             const history = messages.slice(-5).map(m => 
                 `${m.sender.username === currentUser.username ? 'Me' : m.sender.username}: ${m.text || (m.imageUrl ? '[image]' : '[sticker]')}`
             ).join('\n');
@@ -44,14 +43,13 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMe
                 setAiSuggestions(result.suggestions);
             } catch (error) {
                 console.error("Failed to fetch AI suggestions:", error);
-                setAiSuggestions([]); // Clear suggestions on error
+                setAiSuggestions([]);
             } finally {
                 setIsLoadingSuggestions(false);
             }
         }
     };
     
-    // Fetch suggestions when messages change, with a debounce effect
     const timer = setTimeout(fetchSuggestions, 1000);
     return () => clearTimeout(timer);
 
@@ -84,13 +82,13 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMe
           </svg>
         </button>
         <div>
-            <h2 className="font-bold">Global Chat</h2>
-            <p className="text-xs text-gray-400">{totalMembers} Members</p>
+            <h2 className="font-bold">AMS Global Chat</h2>
+            <p className="text-xs text-gray-400">{onlineMembersCount} Online / {totalMembers} Members</p>
         </div>
       </header>
        <div className="p-4 border-b border-zinc-800 hidden md:block">
-            <h2 className="font-bold text-xl">Global Chat</h2>
-            <p className="text-sm text-gray-400">{totalMembers} Members</p>
+            <h2 className="font-bold text-xl">AMS Global Chat</h2>
+            <p className="text-sm text-gray-400">{onlineMembersCount} Online / {totalMembers} Members</p>
        </div>
 
       {/* Messages Area */}

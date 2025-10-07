@@ -23,17 +23,18 @@ const Profile: React.FC<{
   users: User[];
   posts: PostType[];
   viewedProfileId: string | null;
-  currentUserId: string;
+  currentUser: User;
   onGoBack: () => void;
   onViewProfile: (userId: string) => void;
   onCommentClick: (post: PostType) => void;
   onRepost: (post: PostType) => void;
-  followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
   topUsers: string[];
   onLogout: () => void;
-}> = ({ users, posts, viewedProfileId, currentUserId, onGoBack, onViewProfile, onCommentClick, onRepost, followedUserIds, onToggleFollow, topUsers, onLogout }) => {
+  onEditProfile: () => void;
+}> = ({ users, posts, viewedProfileId, currentUser, onGoBack, onViewProfile, onCommentClick, onRepost, onToggleFollow, topUsers, onLogout, onEditProfile }) => {
   const [activeTab, setActiveTab] = useState('all');
+  const currentUserId = currentUser.id;
   
   const userToDisplay = useMemo(() => {
     const profileId = viewedProfileId || currentUserId;
@@ -49,9 +50,8 @@ const Profile: React.FC<{
   const { followerCount, followingCount, postCount } = useMemo(() => {
     if (!userToDisplay) return { followerCount: 0, followingCount: 0, postCount: 0 };
     
-    // Mock data for followers/following as it's not stored
-    const followers = 57000;
-    const following = 325;
+    const followers = users.filter(u => u.following?.includes(userToDisplay.id)).length;
+    const following = userToDisplay.following?.length || 0;
     
     const userPosts = posts.filter(p => p.author.id === userToDisplay.id);
     const pCount = userPosts.length;
@@ -61,7 +61,7 @@ const Profile: React.FC<{
         followingCount: following, 
         postCount: pCount, 
     };
-  }, [userToDisplay, posts]);
+  }, [userToDisplay, posts, users]);
 
   const filteredPosts = useMemo(() => {
     if (!userToDisplay) return [];
@@ -95,7 +95,7 @@ const Profile: React.FC<{
   }
   
   const isCurrentUser = userToDisplay.id === currentUserId;
-  const isFollowing = followedUserIds.has(userToDisplay.id);
+  const isFollowing = currentUser.following?.includes(userToDisplay.id);
   
   const formatStat = (num: number) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -148,7 +148,7 @@ const Profile: React.FC<{
        <div className="px-4 flex gap-2">
         {isCurrentUser ? (
           <>
-            <button className="flex-1 bg-gray-700/80 text-white font-semibold py-1.5 rounded-lg text-sm hover:bg-gray-700 transition-colors">
+            <button onClick={onEditProfile} className="flex-1 bg-gray-700/80 text-white font-semibold py-1.5 rounded-lg text-sm hover:bg-gray-700 transition-colors">
               Edit Profile
             </button>
              <button onClick={onLogout} className="flex-1 bg-red-800/80 text-white font-semibold py-1.5 rounded-lg text-sm hover:bg-red-700 transition-colors">
@@ -190,10 +190,9 @@ const Profile: React.FC<{
                 key={post.id} 
                 post={post} 
                 onViewProfile={onViewProfile} 
-                currentUserId={currentUserId}
+                currentUser={currentUser}
                 onCommentClick={onCommentClick}
                 onRepost={onRepost}
-                followedUserIds={followedUserIds}
                 onToggleFollow={onToggleFollow}
                 topUsers={topUsers}
               />
