@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { User } from '../types';
 
@@ -7,6 +8,7 @@ interface ReelComposerProps {
   onReelSubmit: (videoFile: File, caption: string, taggedUsers: string[]) => void;
   allUsers: User[];
   currentUser: User;
+  isSubmitting: boolean;
 }
 
 type FilterType = 'none' | 'grayscale' | 'sepia' | 'invert';
@@ -18,7 +20,7 @@ const FILTERS: { name: string; value: FilterType }[] = [
     { name: 'Invert', value: 'invert' },
 ];
 
-const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allUsers, currentUser }) => {
+const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allUsers, currentUser, isSubmitting }) => {
   const [step, setStep] = useState(1);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
@@ -122,20 +124,21 @@ const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allU
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
                     placeholder="Write a caption..."
-                    className="w-full h-24 bg-transparent text-lg placeholder-gray-500 focus:outline-none resize-none"
+                    className="w-full h-24 bg-transparent text-lg placeholder-gray-500 focus:outline-none resize-none disabled:opacity-50"
+                    disabled={isSubmitting}
                 />
-                 <button onClick={() => setIsTagging(prev => !prev)} className={`mt-4 flex items-center gap-2 text-sm p-2 rounded-lg w-full text-left ${isTagging ? 'bg-blue-900/40' : 'hover:bg-zinc-800'}`}>
+                 <button onClick={() => setIsTagging(prev => !prev)} className={`mt-4 flex items-center gap-2 text-sm p-2 rounded-lg w-full text-left disabled:opacity-50 ${isTagging ? 'bg-blue-900/40' : 'hover:bg-zinc-800'}`} disabled={isSubmitting}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                     <span>{selectedUsers.length > 0 ? `${selectedUsers.length} people tagged` : "Tag people"}</span>
                  </button>
 
                  {isTagging && (
                      <div className="mt-2 p-2 bg-zinc-800 rounded-lg">
-                        <input type="text" value={tagSearchTerm} onChange={e => setTagSearchTerm(e.target.value)} placeholder="Search..." className="w-full bg-zinc-900 border border-gray-600 rounded-md p-2 mb-2 text-sm focus:ring-2 focus:ring-[#0c3a99] focus:outline-none" />
+                        <input type="text" value={tagSearchTerm} onChange={e => setTagSearchTerm(e.target.value)} placeholder="Search..." className="w-full bg-zinc-900 border border-gray-600 rounded-md p-2 mb-2 text-sm focus:ring-2 focus:ring-[#0c3a99] focus:outline-none" disabled={isSubmitting} />
                         <div className="max-h-32 overflow-y-auto">
                             {filteredUsersForTagging.map(user => {
                                 const isSelected = selectedUsers.some(u => u.id === user.id);
-                                return <div key={user.id} onClick={() => handleToggleTagUser(user)} className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer ${isSelected ? 'bg-blue-900/50' : 'hover:bg-zinc-700'}`}>
+                                return <div key={user.id} onClick={() => !isSubmitting && handleToggleTagUser(user)} className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer ${isSelected ? 'bg-blue-900/50' : 'hover:bg-zinc-700'}`}>
                                     <img src={user.avatarUrl} alt="" className="w-7 h-7 rounded-full" />
                                     <span>{user.username}</span>
                                 </div>
@@ -158,11 +161,11 @@ const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allU
   return (
     <div className="fixed inset-0 bg-[#1C1C1E] z-50 flex flex-col">
       <header className="p-4 flex justify-between items-center bg-zinc-900/80 backdrop-blur-sm flex-shrink-0">
-         {step === 1 && <button onClick={onClose} className="text-2xl">&times;</button>}
-         {step > 1 && <button onClick={() => setStep(step - 1)}>Back</button>}
+         {step === 1 && <button onClick={onClose} className="text-2xl" disabled={isSubmitting}>&times;</button>}
+         {step > 1 && <button onClick={() => setStep(step - 1)} disabled={isSubmitting}>Back</button>}
          <h2 className="font-bold text-lg">{headerTitle}</h2>
-         {step < 3 && <button onClick={() => step < 3 && setStep(step + 1)} disabled={!videoFile} className="font-semibold text-blue-500 disabled:text-gray-500">Next</button>}
-         {step === 3 && <button onClick={handlePublish} className="font-semibold text-blue-500">Publish</button>}
+         {step < 3 && <button onClick={() => step < 3 && setStep(step + 1)} disabled={!videoFile || isSubmitting} className="font-semibold text-blue-500 disabled:text-gray-500">Next</button>}
+         {step === 3 && <button onClick={handlePublish} disabled={isSubmitting} className="font-semibold text-blue-500 disabled:text-gray-500">{isSubmitting ? 'Publishing...' : 'Publish'}</button>}
       </header>
       <div className="flex-grow overflow-y-auto">
         {renderStep()}

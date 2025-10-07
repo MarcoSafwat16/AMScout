@@ -74,6 +74,8 @@ const App: React.FC = () => {
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [dashboardPosition, setDashboardPosition] = useState({ x: window.innerWidth / 2 - 300, y: 100 });
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- Start Data Fetching & Presence ---
   useEffect(() => {
@@ -81,7 +83,7 @@ const App: React.FC = () => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
         // Set user online
-        await updateDoc(userDocRef, { isOnline: true, lastSeen: serverTimestamp() });
+        await updateDoc(userDocRef, { isOnline: true, lastSeen: serverTimestamp() }).catch(e => console.error("Failed to set user online:", e));
 
         const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
           if (doc.exists()) {
@@ -133,6 +135,16 @@ const App: React.FC = () => {
     const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
       const userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setUsers(userList);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const configRef = doc(db, "settings", "appConfig");
+    const unsubscribe = onSnapshot(configRef, (doc) => {
+      if (doc.exists()) {
+        setPromoText(doc.data().promoBannerText || "");
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -246,26 +258,33 @@ const App: React.FC = () => {
   
   const handleAddStory = useCallback(async (imageDataUrl: string) => {
     if (!currentUser) return;
-    
-    const storyFileRef = ref(storage, `stories/${currentUser.id}/${Date.now()}.jpg`);
-    const snapshot = await uploadString(storyFileRef, imageDataUrl, 'data_url');
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    setIsSubmitting(true);
+    try {
+        const storyFileRef = ref(storage, `stories/${currentUser.id}/${Date.now()}.jpg`);
+        const snapshot = await uploadString(storyFileRef, imageDataUrl, 'data_url');
+        const downloadURL = await getDownloadURL(snapshot.ref);
 
-    const newStory = {
-        id: `s_${Date.now()}`,
-        contentUrl: downloadURL,
-        contentType: 'image',
-        duration: 7, // 7 seconds
-        timestamp: serverTimestamp(),
-    };
-    const storyDocRef = doc(db, "userStories", currentUser.id);
-    const docSnap = await getDoc(storyDocRef);
-    if (docSnap.exists()) {
-        await updateDoc(storyDocRef, { stories: arrayUnion(newStory) });
-    } else {
-        await setDoc(storyDocRef, { stories: [newStory] });
+        const newStory = {
+            id: `s_${Date.now()}`,
+            contentUrl: downloadURL,
+            contentType: 'image',
+            duration: 7, // 7 seconds
+            timestamp: serverTimestamp(),
+        };
+        const storyDocRef = doc(db, "userStories", currentUser.id);
+        const docSnap = await getDoc(storyDocRef);
+        if (docSnap.exists()) {
+            await updateDoc(storyDocRef, { stories: arrayUnion(newStory) });
+        } else {
+            await setDoc(storyDocRef, { stories: [newStory] });
+        }
+        handleCloseStoryCreator();
+    } catch (error) {
+        console.error("Error adding story:", error);
+        alert("Failed to post story. Please check your connection and try again.");
+    } finally {
+        setIsSubmitting(false);
     }
-    handleCloseStoryCreator();
   }, [currentUser]);
 
   const handleAddStoryComment = useCallback((storyId: string, commentText: string, authorId: string) => {
@@ -280,17 +299,25 @@ const App: React.FC = () => {
   
   const handleUpdateProfile = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
-    const dataToSave = { ...updatedData };
+    setIsSubmitting(true);
+    try {
+        const dataToSave = { ...updatedData };
 
-    if (dataToSave.avatarUrl && dataToSave.avatarUrl.startsWith('data:')) {
-      const avatarRef = ref(storage, `avatars/${currentUser.id}`);
-      const snapshot = await uploadString(avatarRef, dataToSave.avatarUrl, 'data_url');
-      dataToSave.avatarUrl = await getDownloadURL(snapshot.ref);
+        if (dataToSave.avatarUrl && dataToSave.avatarUrl.startsWith('data:')) {
+          const avatarRef = ref(storage, `avatars/${currentUser.id}`);
+          const snapshot = await uploadString(avatarRef, dataToSave.avatarUrl, 'data_url');
+          dataToSave.avatarUrl = await getDownloadURL(snapshot.ref);
+        }
+        
+        const userRef = doc(db, "users", currentUser.id);
+        await updateDoc(userRef, dataToSave);
+        setIsEditProfileOpen(false);
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        alert("Failed to update profile. Please try again.");
+    } finally {
+        setIsSubmitting(false);
     }
-    
-    const userRef = doc(db, "users", currentUser.id);
-    await updateDoc(userRef, dataToSave);
-    setIsEditProfileOpen(false);
   };
 
   const handleToggleAdmin = async (userId: string) => {
@@ -352,9 +379,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdatePromoText = (newText: string) => {
-    setPromoText(newText);
-    console.log("Promo text updated locally. Firestore implementation needed for persistence.");
+  const handleUpdatePromoText = async (newText: string) => {
+    const configRef = doc(db, "settings", "appConfig");
+    try {
+        await setDoc(configRef, { promoBannerText: newText }, { merge: true });
+    } catch (error) {
+        console.error("Failed to update promo text:", error);
+        alert("Could not save the announcement. Please check the connection.");
+    }
   };
 
   const handleViewProduct = useCallback((productId: string) => setViewedProductId(productId), []);
@@ -419,57 +451,72 @@ const App: React.FC = () => {
 
   const handleAddPost = useCallback(async (caption: string, mediaFile: File | null, taggedUsernames: string[]) => {
     if (!currentUser) return;
-    let imageUrl: string | undefined = undefined;
-    let videoUrl: string | undefined = undefined;
-    
-    if (mediaFile) {
-        const mediaRef = ref(storage, `posts/${currentUser.id}/${Date.now()}_${mediaFile.name}`);
-        const snapshot = await uploadBytes(mediaRef, mediaFile);
-        const downloadURL = await getDownloadURL(snapshot.ref);
-        if (mediaFile.type.startsWith('image/')) imageUrl = downloadURL;
-        else if (mediaFile.type.startsWith('video/')) videoUrl = downloadURL;
-    }
+    setIsSubmitting(true);
+    try {
+        let imageUrl: string | undefined = undefined;
+        let videoUrl: string | undefined = undefined;
+        
+        if (mediaFile) {
+            const mediaRef = ref(storage, `posts/${currentUser.id}/${Date.now()}_${mediaFile.name}`);
+            const snapshot = await uploadBytes(mediaRef, mediaFile);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            if (mediaFile.type.startsWith('image/')) imageUrl = downloadURL;
+            else if (mediaFile.type.startsWith('video/')) videoUrl = downloadURL;
+        }
 
-    const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
-    const newPost = {
-      authorId: currentUser.id,
-      caption,
-      imageUrl,
-      videoUrl,
-      taggedUsers: taggedUsers.map(u => u.id),
-      likes: 0,
-      reposts: 0,
-      comments: [],
-      timestamp: serverTimestamp(),
-      type: 'post',
-    };
-    await addDoc(collection(db, "posts"), newPost);
-    closeComposer();
-    setActivePage(Page.Home);
+        const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
+        const newPost = {
+          authorId: currentUser.id,
+          caption,
+          imageUrl,
+          videoUrl,
+          taggedUsers: taggedUsers.map(u => u.id),
+          likes: 0,
+          reposts: 0,
+          comments: [],
+          timestamp: serverTimestamp(),
+          type: 'post',
+        };
+        await addDoc(collection(db, "posts"), newPost);
+        closeComposer();
+        setActivePage(Page.Home);
+    } catch (error) {
+        console.error("Error creating post:", error);
+        alert("Failed to create post. Please try again.");
+    } finally {
+        setIsSubmitting(false);
+    }
   }, [currentUser, closeComposer, users]);
 
   const handleAddReel = useCallback(async (videoFile: File, caption: string, taggedUsernames: string[]) => {
      if (!currentUser) return;
-     
-     const mediaRef = ref(storage, `reels/${currentUser.id}/${Date.now()}_${videoFile.name}`);
-     const snapshot = await uploadBytes(mediaRef, videoFile);
-     const videoUrl = await getDownloadURL(snapshot.ref);
+     setIsSubmitting(true);
+     try {
+         const mediaRef = ref(storage, `reels/${currentUser.id}/${Date.now()}_${videoFile.name}`);
+         const snapshot = await uploadBytes(mediaRef, videoFile);
+         const videoUrl = await getDownloadURL(snapshot.ref);
 
-     const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
-     const newReel = {
-        authorId: currentUser.id,
-        caption,
-        videoUrl,
-        taggedUsers: taggedUsers.map(u => u.id),
-        likes: 0,
-        reposts: 0,
-        comments: [],
-        timestamp: serverTimestamp(),
-        type: 'reel',
-     };
-     await addDoc(collection(db, "posts"), newReel);
-     closeReelComposer();
-     setIsReelsViewerOpen(true);
+         const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
+         const newReel = {
+            authorId: currentUser.id,
+            caption,
+            videoUrl,
+            taggedUsers: taggedUsers.map(u => u.id),
+            likes: 0,
+            reposts: 0,
+            comments: [],
+            timestamp: serverTimestamp(),
+            type: 'reel',
+         };
+         await addDoc(collection(db, "posts"), newReel);
+         closeReelComposer();
+         setIsReelsViewerOpen(true);
+     } catch (error) {
+        console.error("Error creating reel:", error);
+        alert("Failed to create reel. Please try again.");
+     } finally {
+        setIsSubmitting(false);
+     }
   }, [currentUser, closeReelComposer, users]);
 
 
@@ -653,8 +700,8 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
 
-      {isEditProfileOpen && <EditProfileScreen currentUser={currentUser} onClose={() => setIsEditProfileOpen(false)} onSave={handleUpdateProfile} />}
-      {isStoryCreatorOpen && <StoryCreator onClose={handleCloseStoryCreator} onStoryCreated={handleAddStory} />}
+      {isEditProfileOpen && <EditProfileScreen currentUser={currentUser} onClose={() => setIsEditProfileOpen(false)} onSave={handleUpdateProfile} isSubmitting={isSubmitting} />}
+      {isStoryCreatorOpen && <StoryCreator onClose={handleCloseStoryCreator} onStoryCreated={handleAddStory} isSubmitting={isSubmitting} />}
        {viewingStoriesOfUser && (
         <StoryViewer 
             userStories={viewingStoriesOfUser}
@@ -709,8 +756,8 @@ const App: React.FC = () => {
         />
       )}
       {isChoiceModalOpen && <CreationChoiceModal onClose={closeChoiceModal} onSelectPost={openComposer} onSelectReel={openReelComposer} />}
-      {isComposerOpen && <Composer onClose={closeComposer} onPostSubmit={handleAddPost} allUsers={users} currentUser={currentUser} />}
-      {isReelComposerOpen && <ReelComposer onClose={closeReelComposer} onReelSubmit={handleAddReel} allUsers={users} currentUser={currentUser} />}
+      {isComposerOpen && <Composer onClose={closeComposer} onPostSubmit={handleAddPost} allUsers={users} currentUser={currentUser} isSubmitting={isSubmitting} />}
+      {isReelComposerOpen && <ReelComposer onClose={closeReelComposer} onReelSubmit={handleAddReel} allUsers={users} currentUser={currentUser} isSubmitting={isSubmitting} />}
       {commentingOnPost && 
         <CommentSheet 
             post={commentingOnPost} 

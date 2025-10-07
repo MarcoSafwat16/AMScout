@@ -6,9 +6,10 @@ interface EditProfileScreenProps {
   currentUser: User;
   onClose: () => void;
   onSave: (updatedData: Partial<User>) => void;
+  isSubmitting: boolean;
 }
 
-const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onClose, onSave }) => {
+const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onClose, onSave, isSubmitting }) => {
   const [formData, setFormData] = useState({
     fullName: currentUser.fullName,
     username: currentUser.username,
@@ -16,7 +17,6 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onCl
     bio: currentUser.bio || '',
   });
   
-  const [isLoading, setIsLoading] = useState(false);
   const [newAvatarUrl, setNewAvatarUrl] = useState<string | null>(null);
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [imageToEdit, setImageToEdit] = useState<string | null>(null);
@@ -27,10 +27,8 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onCl
   };
 
   const handleSave = async () => {
-    setIsLoading(true);
     if (!formData.fullName.trim() || !formData.username.trim()) {
       alert('Full Name and Username cannot be empty.');
-      setIsLoading(false);
       return;
     }
     
@@ -40,7 +38,6 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onCl
     }
 
     await onSave(updates);
-    setIsLoading(false);
   };
   
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,7 +78,7 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onCl
           <div className="flex flex-col items-center mb-6">
               <img src={newAvatarUrl || currentUser.avatarUrl} alt="Profile Avatar" className="w-24 h-24 rounded-full mb-3 object-cover" />
               <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()} className="text-blue-400 font-semibold text-sm hover:underline">
+              <button onClick={() => fileInputRef.current?.click()} className="text-blue-400 font-semibold text-sm hover:underline" disabled={isSubmitting}>
                   Change Photo
               </button>
           </div>
@@ -89,25 +86,25 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ currentUser, onCl
           <div className="space-y-4">
             <div>
               <label className="text-sm font-semibold text-gray-400">Full Name</label>
-              <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
+              <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" disabled={isSubmitting}/>
             </div>
             <div>
               <label className="text-sm font-semibold text-gray-400">Username</label>
-              <input type="text" name="username" value={formData.username} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
+              <input type="text" name="username" value={formData.username} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" disabled={isSubmitting}/>
             </div>
              <div>
               <label className="text-sm font-semibold text-gray-400">Bio</label>
-              <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Tell us about yourself..."/>
+              <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" placeholder="Tell us about yourself..." disabled={isSubmitting}/>
             </div>
             <div>
               <label className="text-sm font-semibold text-gray-400">Phone Number</label>
-              <input type="tel" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
+              <input type="tel" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-2 mt-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" disabled={isSubmitting}/>
             </div>
           </div>
           <div className="flex justify-end gap-4 mt-8">
-            <button onClick={onClose} className="bg-zinc-700 hover:bg-zinc-600 font-semibold py-2 px-5 rounded-lg text-sm transition-colors">Cancel</button>
-            <button onClick={handleSave} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 font-semibold py-2 px-5 rounded-lg text-sm transition-colors disabled:bg-gray-500">
-              {isLoading ? 'Saving...' : 'Save Changes'}
+            <button onClick={onClose} className="bg-zinc-700 hover:bg-zinc-600 font-semibold py-2 px-5 rounded-lg text-sm transition-colors" disabled={isSubmitting}>Cancel</button>
+            <button onClick={handleSave} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 font-semibold py-2 px-5 rounded-lg text-sm transition-colors disabled:bg-gray-500">
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </div>

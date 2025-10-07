@@ -7,6 +7,7 @@ import GalleryIcon from './icons/GalleryIcon';
 interface StoryCreatorProps {
   onClose: () => void;
   onStoryCreated: (dataUrl: string) => void;
+  isSubmitting: boolean;
 }
 
 type FilterType = 'none' | 'grayscale(1)' | 'sepia(1)' | 'saturate(2)' | 'contrast(1.5)' | 'brightness(1.2)' | 'invert(1)';
@@ -21,7 +22,7 @@ const FILTERS: { name: string; value: FilterType }[] = [
     { name: 'Invert', value: 'invert(1)' },
 ];
 
-const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) => {
+const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated, isSubmitting }) => {
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [activeFilter, setActiveFilter] = useState<FilterType>('none');
     const [isCameraFlipped, setIsCameraFlipped] = useState(false);
@@ -170,25 +171,31 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
                             style={{ filter: activeFilter, transform: isCameraFlipped ? 'scaleX(-1)' : 'scaleX(1)' }}
                         />
                     )}
+                    {isSubmitting && (
+                        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white">
+                            <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            <p className="mt-2 font-semibold">Posting...</p>
+                        </div>
+                    )}
                 </div>
                 
                 {/* Header */}
                 <div className="absolute top-0 left-0 right-0 p-4 flex justify-end z-10">
-                    <button onClick={onClose} className="text-white text-3xl leading-none bg-black/30 rounded-full w-10 h-10 flex items-center justify-center">&times;</button>
+                    <button onClick={onClose} className="text-white text-3xl leading-none bg-black/30 rounded-full w-10 h-10 flex items-center justify-center" disabled={isSubmitting}>&times;</button>
                 </div>
 
                 {/* Footer Controls */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
                     {capturedImage ? (
                         <div className="flex items-center justify-between">
-                             <button onClick={handleRetake} className="font-semibold text-white bg-black/40 py-2 px-4 rounded-full">
+                             <button onClick={handleRetake} className="font-semibold text-white bg-black/40 py-2 px-4 rounded-full disabled:opacity-50" disabled={isSubmitting}>
                                 Retake
                             </button>
                             <div>
                                 <h3 className="text-sm font-semibold text-white mb-2 text-center">Filter</h3>
                                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                                 {FILTERS.map(filter => (
-                                    <button key={filter.value} onClick={() => setActiveFilter(filter.value)} className="flex-shrink-0 text-center">
+                                    <button key={filter.value} onClick={() => setActiveFilter(filter.value)} className="flex-shrink-0 text-center" disabled={isSubmitting}>
                                         <div className={`w-14 h-14 rounded-md overflow-hidden border-2 bg-zinc-600 ${activeFilter === filter.value ? 'border-blue-500' : 'border-transparent'}`}>
                                             <img src={capturedImage} className="w-full h-full object-cover" style={{filter: filter.value}}/>
                                         </div>
@@ -196,8 +203,8 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
                                 ))}
                                 </div>
                             </div>
-                             <button onClick={handlePost} className="flex items-center gap-2 font-bold text-black bg-white py-3 px-6 rounded-full">
-                                Post Story <SendIcon className="w-5 h-5"/>
+                             <button onClick={handlePost} className="flex items-center gap-2 font-bold text-black bg-white py-3 px-6 rounded-full disabled:bg-gray-400" disabled={isSubmitting}>
+                                {isSubmitting ? 'Posting...' : 'Post Story'} <SendIcon className="w-5 h-5"/>
                             </button>
                         </div>
                     ) : (

@@ -64,6 +64,10 @@ const ProductComposer: React.FC<ProductComposerProps> = ({ onClose, onSave, prod
       category,
       variants,
       imageUrls: imagePreviews,
+      // Fix: The `onSave` prop expects a `sellerId`. For new products,
+      // a placeholder is fine as App.tsx overwrites it with the current user's ID.
+      // For existing products, we preserve the original sellerId.
+      sellerId: productToEdit?.sellerId || '',
     });
   };
 

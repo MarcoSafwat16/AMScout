@@ -6,9 +6,10 @@ interface ComposerProps {
   onPostSubmit: (caption: string, mediaFile: File | null, taggedUsers: string[]) => void;
   allUsers: User[];
   currentUser: User;
+  isSubmitting: boolean;
 }
 
-const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, currentUser }) => {
+const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, currentUser, isSubmitting }) => {
   const [postText, setPostText] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -79,7 +80,7 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
   return (
     <div 
       className={`fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`} 
-      onClick={handleClose}
+      onClick={isSubmitting ? undefined : handleClose}
     >
       <div 
         className={`bg-zinc-900/80 border border-white/10 w-full max-w-lg rounded-2xl shadow-2xl shadow-blue-900/20 p-6 flex flex-col max-h-[90vh] transition-all duration-300 ${isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
@@ -87,7 +88,7 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
       >
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 className="text-xl font-bold">Create Post</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+          <button onClick={handleClose} className="text-gray-400 hover:text-white text-3xl leading-none" disabled={isSubmitting}>&times;</button>
         </div>
         
         <div className="flex-grow overflow-y-auto pr-2 -mr-2 relative">
@@ -95,7 +96,8 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
             value={postText}
             onChange={(e) => setPostText(e.target.value)}
             placeholder="What's happening?"
-            className="w-full h-28 bg-transparent text-lg placeholder-gray-500 focus:outline-none resize-none"
+            className="w-full h-28 bg-transparent text-lg placeholder-gray-500 focus:outline-none resize-none disabled:opacity-50"
+            disabled={isSubmitting}
           />
 
           {mediaPreview && (
@@ -105,7 +107,7 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
               ) : (
                 <img src={mediaPreview} alt="Preview" className="w-full max-h-64 object-contain rounded-lg" />
               )}
-              <button onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1.5 leading-none">&times;</button>
+              <button onClick={() => { setMediaFile(null); setMediaPreview(null); }} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1.5 leading-none" disabled={isSubmitting}>&times;</button>
             </div>
           )}
 
@@ -132,12 +134,13 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
                     placeholder="Search for people to tag..."
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg p-2 mb-2 text-sm focus:ring-2 focus:ring-[#0c3a99] focus:outline-none"
                     autoFocus
+                    disabled={isSubmitting}
                 />
                 <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
                     {filteredUsersForTagging.length > 0 ? filteredUsersForTagging.map(user => {
                         const isSelected = selectedUsers.some(u => u.id === user.id);
                         return (
-                            <div key={user.id} onClick={() => handleToggleTagUser(user)} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-900/50' : 'hover:bg-zinc-700'}`}>
+                            <div key={user.id} onClick={() => !isSubmitting && handleToggleTagUser(user)} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${isSubmitting ? 'cursor-not-allowed' : ''} ${isSelected ? 'bg-blue-900/50' : 'hover:bg-zinc-700'}`}>
                                 <img src={user.avatarUrl} alt={user.username} className="w-8 h-8 rounded-full" />
                                 <span className="font-medium text-sm">{user.username}</span>
                                 <div className={`ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-[#0c3a99] border-[#0c3a99]' : 'border-gray-500'}`}>
@@ -155,11 +158,11 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
 
         <div className="mt-4 flex justify-between items-center border-t border-gray-700 pt-4 flex-shrink-0">
           <div className="flex gap-2 text-gray-400">
-            <input type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleMediaChange} className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-white/10 rounded-full" title="Add Photo/Video">
+            <input type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleMediaChange} className="hidden" disabled={isSubmitting} />
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-50" title="Add Photo/Video" disabled={isSubmitting}>
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             </button>
-            <button onClick={() => setIsTagging(prev => !prev)} className={`p-2 hover:bg-white/10 rounded-full ${isTagging ? 'bg-blue-500/20 text-blue-400' : ''}`} title="Tag people">
+            <button onClick={() => setIsTagging(prev => !prev)} className={`p-2 hover:bg-white/10 rounded-full disabled:opacity-50 ${isTagging ? 'bg-blue-500/20 text-blue-400' : ''}`} title="Tag people" disabled={isSubmitting}>
                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" /></svg>
             </button>
           </div>
@@ -170,9 +173,9 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
             <button 
                 onClick={handlePublish}
                 className="bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2 px-6 rounded-full transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
-                disabled={(!postText.trim() && !mediaFile) || remainingChars < 0}
+                disabled={(!postText.trim() && !mediaFile) || remainingChars < 0 || isSubmitting}
             >
-                Publish
+                {isSubmitting ? 'Publishing...' : 'Publish'}
             </button>
           </div>
         </div>
