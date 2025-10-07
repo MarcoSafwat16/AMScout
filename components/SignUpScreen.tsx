@@ -1,11 +1,12 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
+import { auth, db } from '../services/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, collection, getDocs, query, limit } from "firebase/firestore";
 
 interface SignUpScreenProps {
-  onSignUp: (userData: Omit<User, 'id' | 'avatarUrl' | 'points' | 'isAdmin'>) => void;
   onSwitchToLogin: () => void;
-  users: User[];
+  users: User[]; // Used for live validation
 }
 
 const TEAMS = {
@@ -19,7 +20,7 @@ const TEAMS = {
     'leaders': 'قاده'
 };
 
-const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onSwitchToLogin, users }) => {
+const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSwitchToLogin, users }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
@@ -33,6 +34,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onSwitchToLogin, 
   });
   
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isLoading, setIsLoading] = useState(false);
 
   const validateField = (name: string, value: string) => {
     let error = '';
@@ -77,17 +79,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onSwitchToLogin, 
     }
   };
 
-  const isFormValid = () => {
-    for (const key in formData) {
-        if (Object.prototype.hasOwnProperty.call(formData, key)) {
-            const error = validateField(key, formData[key as keyof typeof formData]);
-            if(error) return false;
-        }
-    }
-    return true;
-  };
-
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
     let formIsValid = true;
@@ -102,9 +94,39 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onSwitchToLogin, 
     }
     setErrors(newErrors);
 
-    if (formIsValid) {
-      const { confirmPassword, ...userData } = formData;
-      onSignUp(userData);
+    if (!formIsValid) return;
+
+    setIsLoading(true);
+
+    try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, limit(1));
+        const querySnapshot = await getDocs(q);
+        const isFirstUser = querySnapshot.empty;
+
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        const firebaseUser = userCredential.user;
+        const { confirmPassword, password, ...userData } = formData;
+        
+        const newUser: Omit<User, 'id'> = {
+            ...userData,
+            avatarUrl: `https://picsum.photos/seed/${firebaseUser.uid}/100`,
+            points: 0,
+            isAdmin: isFirstUser,
+        };
+        
+        // Save the extended user profile to Firestore
+        await setDoc(doc(db, "users", firebaseUser.uid), newUser);
+        // Success! onAuthStateChanged in App.tsx will now handle the login.
+    } catch (error: any) {
+        if (error.code === 'auth/email-already-in-use') {
+            setErrors(prev => ({ ...prev, email: 'This email address is already in use.' }));
+        } else {
+            setErrors(prev => ({ ...prev, form: 'An unexpected error occurred. Please try again.' }));
+            console.error(error);
+        }
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -186,8 +208,9 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onSwitchToLogin, 
               </div>
           </div>
         </div>
-        <button type="submit" className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed mt-6">
-          Sign Up
+        {errors.form && <p className="text-red-300 text-xs mt-4 text-center">{errors.form}</p>}
+        <button type="submit" disabled={isLoading} className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed mt-6">
+          {isLoading ? 'Creating Account...' : 'Sign Up'}
         </button>
       </form>
 

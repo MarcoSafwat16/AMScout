@@ -1,12 +1,11 @@
-
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Page, User, Post, Comment, Message, Product, CartItem, ProductVariant, UserStories, Story, Reaction, Notification } from './types';
 import AppNavBar from './components/BottomNavBar';
 import Feed from './components/Feed';
 import Header from './components/Header';
 import Composer from './components/Composer';
 import Profile from './components/Profile';
-import { mockUsers as initialMockUsers, mockPosts as initialMockPosts, mockUserStories as initialMockUserStories, mockGroupChatMessages, mockUserStickers, mockProducts as initialMockProducts, mockNotifications as initialMockNotifications } from './hooks/useMockData';
+import { mockPosts as initialMockPosts, mockUserStories as initialMockUserStories, mockGroupChatMessages, mockUserStickers, mockProducts as initialMockProducts, mockNotifications as initialMockNotifications } from './hooks/useMockData';
 import StoryTray from './components/StoryTray';
 import CommentSheet from './components/CommentSheet';
 import CreationChoiceModal from './components/CreationChoiceModal';
@@ -28,13 +27,19 @@ import NotificationsScreen from './components/ChatListScreen';
 import LoginScreen from './components/LoginScreen';
 import SignUpScreen from './components/SignUpScreen';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
+import { auth, db } from './services/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+
 
 type AuthPage = 'login' | 'signup' | 'forgotPassword';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [authPage, setAuthPage] = useState<AuthPage>('login');
-
+  
+  const [users, setUsers] = useState<User[]>([]);
   const [activePage, setActivePage] = useState<Page>(Page.Home);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isReelComposerOpen, setIsReelComposerOpen] = useState(false);
@@ -56,7 +61,6 @@ const App: React.FC = () => {
   const [isStoryCreatorOpen, setIsStoryCreatorOpen] = useState(false);
   
   // E-commerce & Admin state
-  const [users, setUsers] = useState<User[]>(initialMockUsers);
   const [products, setProducts] = useState<Product[]>(initialMockProducts);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [viewedProductId, setViewedProductId] = useState<string | null>(null);
@@ -65,6 +69,40 @@ const App: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [dashboardPosition, setDashboardPosition] = useState({ x: window.innerWidth / 2 - 250, y: 100 });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+            setCurrentUser({ id: userDoc.id, ...userDoc.data() } as User);
+        } else {
+            console.error("User data not found in Firestore.");
+            setCurrentUser(null);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+        try {
+            const usersCollection = collection(db, "users");
+            const userSnapshot = await getDocs(usersCollection);
+            const userList = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+            setUsers(userList);
+        } catch (error) {
+            console.error("Error fetching users:", error);
+        }
+    };
+    fetchUsers();
+  }, [currentUser]); // Refetch users when auth state changes (e.g., new user signs up)
+
 
   const topUsers = useMemo(() => {
     return [...users]
@@ -78,21 +116,9 @@ const App: React.FC = () => {
   }, []);
 
   // --- Start Auth Handlers ---
-  const handleLogin = (user: User) => {
-      setCurrentUser(user);
-  };
-  
-  const handleSignUp = (newUserData: Omit<User, 'id' | 'avatarUrl' | 'points' | 'isAdmin'>) => {
-      const newUser: User = {
-          ...newUserData,
-          id: `u${users.length + 1}`,
-          avatarUrl: `https://picsum.photos/seed/u${users.length + 1}/100`,
-          points: 0,
-          isAdmin: false,
-      };
-      setUsers(prev => [...prev, newUser]);
-      setCurrentUser(newUser);
-  };
+  const handleLogout = () => {
+    signOut(auth).catch(error => console.error("Logout failed", error));
+  }
   // --- End Auth Handlers ---
 
 
@@ -551,18 +577,29 @@ const App: React.FC = () => {
       return products.filter(p => p.category === activeShopCategory);
   }, [products, activeShopCategory]);
 
+  if (isLoading) {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <svg className="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+    );
+  }
+
   if (!currentUser) {
     let pageContent;
     switch (authPage) {
         case 'signup':
-            pageContent = <SignUpScreen onSignUp={handleSignUp} onSwitchToLogin={() => setAuthPage('login')} users={users}/>;
+            pageContent = <SignUpScreen onSwitchToLogin={() => setAuthPage('login')} users={users}/>;
             break;
         case 'forgotPassword':
-            pageContent = <ForgotPasswordScreen users={users} onSwitchToLogin={() => setAuthPage('login')} />;
+            pageContent = <ForgotPasswordScreen onSwitchToLogin={() => setAuthPage('login')} />;
             break;
         case 'login':
         default:
-            pageContent = <LoginScreen onLogin={handleLogin} onSwitchToSignUp={() => setAuthPage('signup')} onSwitchToForgotPassword={() => setAuthPage('forgotPassword')} users={users} />;
+            pageContent = <LoginScreen onSwitchToSignUp={() => setAuthPage('signup')} onSwitchToForgotPassword={() => setAuthPage('forgotPassword')} />;
             break;
     }
     return (
@@ -592,7 +629,7 @@ const App: React.FC = () => {
             <NotificationsScreen notifications={notifications} onViewProfile={handleViewProfile} />
         </>;
       case Page.Profile:
-        return <Profile posts={posts} viewedProfileId={viewedProfileId} currentUserId={currentUser.id} onGoBack={handleGoHome} onViewProfile={handleViewProfile} onCommentClick={handleOpenComments} onRepost={handleRepost} followedUserIds={followedUserIds} onToggleFollow={handleToggleFollow} topUsers={topUsers} />;
+        return <Profile users={users} posts={posts} viewedProfileId={viewedProfileId} currentUserId={currentUser.id} onGoBack={handleGoHome} onViewProfile={handleViewProfile} onCommentClick={handleOpenComments} onRepost={handleRepost} followedUserIds={followedUserIds} onToggleFollow={handleToggleFollow} topUsers={topUsers} onLogout={handleLogout} />;
       case Page.Messages:
         return <ChatScreen messages={groupChatMessages} currentUser={currentUser} onSendMessage={handleSendMessage} onGoBack={handleGoHome} userStickers={userStickers} onOpenStickerCreator={() => setIsStickerCreatorOpen(true)} allUsers={users} topUsers={topUsers} />;
       case Page.Shop:

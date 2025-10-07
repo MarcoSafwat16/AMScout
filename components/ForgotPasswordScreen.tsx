@@ -1,15 +1,15 @@
-
 import React, { useState } from 'react';
-import { User } from '../types';
+import { auth } from '../services/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 interface ForgotPasswordScreenProps {
   onSwitchToLogin: () => void;
-  users: User[];
 }
 
-const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onSwitchToLogin, users }) => {
+const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onSwitchToLogin }) => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -21,10 +21,19 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onSwitchToL
       return;
     }
     
-    // In a real app, you'd call an API here.
-    // For security, we don't confirm if the email exists. We just show a generic success message.
-    console.log(`Password reset requested for: ${email}`);
-    setIsSubmitted(true);
+    setIsLoading(true);
+    sendPasswordResetEmail(auth, email)
+        .then(() => {
+            setIsSubmitted(true);
+        })
+        .catch((error) => {
+            // We don't want to reveal if an email exists or not, but for better DX during development:
+            console.error(error);
+            setError("Failed to send reset email. Please try again later.");
+        })
+        .finally(() => {
+            setIsLoading(false);
+        });
   };
   
   if (isSubmitted) {
@@ -68,9 +77,10 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onSwitchToL
 
         <button
           type="submit"
-          className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors"
+          disabled={isLoading}
+          className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors disabled:bg-gray-600"
         >
-          Send Reset Link
+          {isLoading ? 'Sending...' : 'Send Reset Link'}
         </button>
       </form>
 

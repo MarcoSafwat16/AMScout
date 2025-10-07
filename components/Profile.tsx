@@ -1,7 +1,5 @@
-
 import React, { useState, useMemo } from 'react';
 import { User, Post as PostType } from '../types';
-import { mockUsers } from '../hooks/useMockData';
 import PostComponent from './Post';
 import TagIcon from './icons/TagIcon';
 import ReelsIcon from './icons/ReelsIcon';
@@ -22,6 +20,7 @@ const PhotoIcon: React.FC<{ className?: string; filled: boolean }> = ({ classNam
 // --- End Helper Icons ---
 
 const Profile: React.FC<{
+  users: User[];
   posts: PostType[];
   viewedProfileId: string | null;
   currentUserId: string;
@@ -32,15 +31,14 @@ const Profile: React.FC<{
   followedUserIds: Set<string>;
   onToggleFollow: (userId: string) => void;
   topUsers: string[];
-}> = ({ posts, viewedProfileId, currentUserId, onGoBack, onViewProfile, onCommentClick, onRepost, followedUserIds, onToggleFollow, topUsers }) => {
+  onLogout: () => void;
+}> = ({ users, posts, viewedProfileId, currentUserId, onGoBack, onViewProfile, onCommentClick, onRepost, followedUserIds, onToggleFollow, topUsers, onLogout }) => {
   const [activeTab, setActiveTab] = useState('all');
   
   const userToDisplay = useMemo(() => {
-    if (viewedProfileId) {
-      return mockUsers.find(u => u.id === viewedProfileId) || null;
-    }
-    return mockUsers.find(u => u.id === currentUserId);
-  }, [viewedProfileId, currentUserId]);
+    const profileId = viewedProfileId || currentUserId;
+    return users.find(u => u.id === profileId) || null;
+  }, [viewedProfileId, currentUserId, users]);
   
   const creatorRank = useMemo(() => {
     if (!userToDisplay) return null;
@@ -48,8 +46,8 @@ const Profile: React.FC<{
     return rank !== -1 ? rank + 1 : null;
   }, [userToDisplay, topUsers]);
 
-  const { followerCount, followingCount, postCount, interactionPoints } = useMemo(() => {
-    if (!userToDisplay) return { followerCount: 0, followingCount: 0, postCount: 0, interactionPoints: 0 };
+  const { followerCount, followingCount, postCount } = useMemo(() => {
+    if (!userToDisplay) return { followerCount: 0, followingCount: 0, postCount: 0 };
     
     // Mock data for followers/following as it's not stored
     const followers = 57000;
@@ -57,17 +55,11 @@ const Profile: React.FC<{
     
     const userPosts = posts.filter(p => p.author.id === userToDisplay.id);
     const pCount = userPosts.length;
-    
-    const totalLikes = userPosts.reduce((sum, post) => sum + post.likes, 0);
-    const totalComments = userPosts.reduce((sum, post) => sum + post.comments.length, 0);
-
-    const points = (pCount * 20) + (totalComments * 10) + (totalLikes * 5);
 
     return { 
         followerCount: followers, 
         followingCount: following, 
         postCount: pCount, 
-        interactionPoints: points 
     };
   }, [userToDisplay, posts]);
 
@@ -158,6 +150,9 @@ const Profile: React.FC<{
           <>
             <button className="flex-1 bg-gray-700/80 text-white font-semibold py-1.5 rounded-lg text-sm hover:bg-gray-700 transition-colors">
               Edit Profile
+            </button>
+             <button onClick={onLogout} className="flex-1 bg-red-800/80 text-white font-semibold py-1.5 rounded-lg text-sm hover:bg-red-700 transition-colors">
+              Logout
             </button>
           </>
         ) : (

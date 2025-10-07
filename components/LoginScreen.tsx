@@ -1,40 +1,45 @@
-
 import React, { useState } from 'react';
-import { User } from '../types';
+import { auth } from '../services/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 interface LoginScreenProps {
-  onLogin: (user: User) => void;
   onSwitchToSignUp: () => void;
   onSwitchToForgotPassword: () => void;
-  users: User[];
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onSwitchToSignUp, onSwitchToForgotPassword, users }) => {
-  const [identifier, setIdentifier] = useState('');
+const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    const lowercasedIdentifier = identifier.toLowerCase();
-    const user = users.find(u => 
-        u.username.toLowerCase() === lowercasedIdentifier ||
-        u.email.toLowerCase() === lowercasedIdentifier ||
-        u.phoneNumber === identifier
-    );
+    setIsLoading(true);
 
-    // Mock authentication: any existing user with password 'password123'
-    if (user && password === 'password123') {
-        if (user.isBlocked) {
-            setError('This account has been blocked.');
-            return;
+    signInWithEmailAndPassword(auth, email, password)
+      .then((userCredential) => {
+        // Login successful, onAuthStateChanged in App.tsx will handle the rest.
+      })
+      .catch((error) => {
+        switch (error.code) {
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+            case 'auth/invalid-credential':
+                setError('Invalid email or password.');
+                break;
+            case 'auth/invalid-email':
+                setError('Please enter a valid email address.');
+                break;
+            default:
+                setError('An unexpected error occurred. Please try again.');
+                break;
         }
-        onLogin(user);
-    } else {
-      setError('Invalid credentials or password.');
-    }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   return (
@@ -47,13 +52,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onSwitchToSignUp, on
       <form onSubmit={handleLogin} className="bg-zinc-800/20 backdrop-blur-xl border border-white/10 shadow-2xl shadow-blue-900/10 rounded-2xl p-8 space-y-6">
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-bold text-gray-200 block mb-2">Username, Email, or Phone</label>
+            <label className="text-sm font-bold text-gray-200 block mb-2">Email Address</label>
             <input
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-black/20 border border-white/20 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-2 focus:ring-blue-400 focus:outline-none transition-shadow"
-              placeholder="e.g., Aria or aria@example.com"
+              placeholder="e.g., aria@example.com"
+              required
             />
           </div>
           <div>
@@ -63,7 +69,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onSwitchToSignUp, on
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-black/20 border border-white/20 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-2 focus:ring-blue-400 focus:outline-none transition-shadow"
-              placeholder="•••••••• (use 'password123')"
+              placeholder="••••••••"
+              required
             />
           </div>
         </div>
@@ -78,9 +85,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onSwitchToSignUp, on
 
         <button
           type="submit"
-          className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors"
+          disabled={isLoading}
+          className="w-full bg-[#0c3a99] hover:bg-[#1049b8] text-white font-bold py-2.5 rounded-lg transition-colors disabled:bg-gray-600"
         >
-          Sign In
+          {isLoading ? 'Signing In...' : 'Sign In'}
         </button>
       </form>
 
