@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SendIcon from './icons/SendIcon';
 import GalleryIcon from './icons/GalleryIcon';
@@ -111,7 +112,20 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
     
     const handlePost = () => {
         if(capturedImage) {
-            onStoryCreated(capturedImage);
+            const canvas = canvasRef.current;
+            const image = new Image();
+            image.onload = () => {
+                if (!canvas) return;
+                canvas.width = image.width;
+                canvas.height = image.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                ctx.filter = activeFilter;
+                ctx.drawImage(image, 0, 0);
+                const finalDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                onStoryCreated(finalDataUrl);
+            };
+            image.src = capturedImage;
         }
     };
 
@@ -145,7 +159,7 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
                 {/* Main View */}
                 <div className="relative w-full aspect-[9/16] max-h-full rounded-lg overflow-hidden bg-zinc-900">
                     {capturedImage ? (
-                        <img src={capturedImage} alt="Captured story" className="w-full h-full object-cover" />
+                        <img src={capturedImage} alt="Captured story" className="w-full h-full object-cover" style={{ filter: activeFilter }} />
                     ) : (
                         <video 
                             ref={videoRef} 
@@ -170,13 +184,25 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
                              <button onClick={handleRetake} className="font-semibold text-white bg-black/40 py-2 px-4 rounded-full">
                                 Retake
                             </button>
+                            <div>
+                                <h3 className="text-sm font-semibold text-white mb-2 text-center">Filter</h3>
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                                {FILTERS.map(filter => (
+                                    <button key={filter.value} onClick={() => setActiveFilter(filter.value)} className="flex-shrink-0 text-center">
+                                        <div className={`w-14 h-14 rounded-md overflow-hidden border-2 bg-zinc-600 ${activeFilter === filter.value ? 'border-blue-500' : 'border-transparent'}`}>
+                                            <img src={capturedImage} className="w-full h-full object-cover" style={{filter: filter.value}}/>
+                                        </div>
+                                    </button>
+                                ))}
+                                </div>
+                            </div>
                              <button onClick={handlePost} className="flex items-center gap-2 font-bold text-black bg-white py-3 px-6 rounded-full">
                                 Post Story <SendIcon className="w-5 h-5"/>
                             </button>
                         </div>
                     ) : (
                        <>
-                        <div className="flex justify-around items-center mb-4">
+                        <div className="flex justify-around items-center">
                             <button onClick={() => fileInputRef.current?.click()} className="w-16 h-16 text-white bg-black/40 rounded-full flex items-center justify-center" aria-label="Upload from Gallery">
                                 <GalleryIcon className="w-7 h-7" />
                             </button>
@@ -188,16 +214,6 @@ const StoryCreator: React.FC<StoryCreatorProps> = ({ onClose, onStoryCreated }) 
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 20h5v-5M20 4h-5v5" />
                                </svg>
                             </button>
-                        </div>
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                            {FILTERS.map(filter => (
-                                <button key={filter.value} onClick={() => setActiveFilter(filter.value)} className="flex-shrink-0 text-center">
-                                    <div className={`w-14 h-14 rounded-md overflow-hidden border-2 bg-zinc-600 ${activeFilter === filter.value ? 'border-blue-500' : 'border-transparent'}`}>
-                                        {/* A static preview image could go here */}
-                                    </div>
-                                    <p className="text-xs mt-1 text-white">{filter.name}</p>
-                                </button>
-                            ))}
                         </div>
                         </>
                     )}

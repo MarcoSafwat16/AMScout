@@ -6,7 +6,7 @@ import { generateChatReply } from '../services/geminiService';
 interface ChatScreenProps {
   messages: Message[];
   currentUser: User;
-  onSendMessage: (message: Omit<Message, 'sender' | 'id' | 'timestamp'>) => void;
+  onSendMessage: (message: { text?: string; stickerUrl?: string; mediaFile?: File }) => void;
   onGoBack: () => void;
   userStickers: string[];
   onOpenStickerCreator: () => void;
@@ -77,7 +77,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ messages, currentUser, onSendMe
       {/* Header */}
       <header className="p-3 flex items-center gap-3 border-b border-gray-800 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10 md:hidden">
         <button onClick={onGoBack}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth="2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>

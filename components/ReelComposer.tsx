@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { User } from '../types';
 
 interface ReelComposerProps {
@@ -30,9 +30,18 @@ const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allU
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    return () => {
+      if (videoPreview) {
+        URL.revokeObjectURL(videoPreview);
+      }
+    };
+  }, [videoPreview]);
+
   const handleVideoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type.startsWith('video/')) {
+      if (videoPreview) URL.revokeObjectURL(videoPreview);
       setVideoFile(file);
       setVideoPreview(URL.createObjectURL(file));
       setStep(2); // Move to edit step
@@ -107,8 +116,8 @@ const ReelComposer: React.FC<ReelComposerProps> = ({ onClose, onReelSubmit, allU
         
       case 3: // Finalize (Caption & Publish)
         return (
-          <div className="flex flex-col h-full">
-             <div className="flex-grow p-4">
+          <div className="flex h-full">
+             <div className="flex-grow p-4 flex flex-col">
                 <textarea 
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}

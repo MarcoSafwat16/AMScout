@@ -124,7 +124,7 @@ const Profile: React.FC<{
           <div className="flex items-center gap-4">
             <img src={userToDisplay.avatarUrl} alt={userToDisplay.username} className="w-20 h-20 rounded-full object-cover bg-gray-700 flex-shrink-0" />
             <div className="flex-grow">
-              <h2 className="text-lg font-bold">{userToDisplay.username}</h2>
+              <h2 className="text-lg font-bold">{userToDisplay.fullName}</h2>
               <p className="text-sm text-gray-400">@{userToDisplay.username.toLowerCase()}</p>
               {creatorRank && (
                 <div className="mt-2 inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 font-bold text-xs px-2 py-1 rounded-full">
@@ -134,6 +134,10 @@ const Profile: React.FC<{
               )}
             </div>
           </div>
+          
+          {userToDisplay.bio && (
+            <p className="text-sm text-center text-gray-300 my-4 whitespace-pre-wrap">{userToDisplay.bio}</p>
+          )}
 
           <div className="flex justify-around text-center pt-4 mt-4 border-t border-gray-700/60">
               <div><span className="font-bold text-base">{formatStat(postCount)}</span><p className="text-xs text-gray-400">Posts</p></div>

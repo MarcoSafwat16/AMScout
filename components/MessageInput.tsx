@@ -1,13 +1,12 @@
 
 import React, { useState, useRef } from 'react';
-import { Message } from '../types';
 import PaperclipIcon from './icons/PaperclipIcon';
 import SendIcon from './icons/SendIcon';
 import StickerIcon from './icons/StickerIcon';
 import StickerPicker from './StickerPicker';
 
 interface MessageInputProps {
-  onSendMessage: (message: Omit<Message, 'sender' | 'id' | 'timestamp'>) => void;
+  onSendMessage: (message: { text?: string; stickerUrl?: string; mediaFile?: File }) => void;
   userStickers: string[];
   onOpenStickerCreator: () => void;
   aiSuggestions: string[];
@@ -34,12 +33,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, userStickers
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      if (file.type.startsWith('image/')) {
-        onSendMessage({ imageUrl: url });
-      } else if (file.type.startsWith('video/')) {
-        onSendMessage({ videoUrl: url });
-      }
+      onSendMessage({ mediaFile: file });
     }
      // Reset file input to allow selecting the same file again
     if (fileInputRef.current) {

@@ -14,6 +14,8 @@ export interface User {
   isMuted?: boolean; // "View-only" ban
   points?: number;
   following?: string[];
+  bio?: string;
+  lastSeen?: any;
 }
 
 export interface Comment {

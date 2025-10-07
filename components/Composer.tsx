@@ -24,6 +24,12 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
 
   useEffect(() => {
     setIsVisible(true);
+    return () => {
+      // Clean up the object URL on unmount
+      if (mediaPreview) {
+        URL.revokeObjectURL(mediaPreview);
+      }
+    };
   }, []);
 
   const handleClose = () => {
@@ -32,6 +38,9 @@ const Composer: React.FC<ComposerProps> = ({ onClose, onPostSubmit, allUsers, cu
   }
 
   const handleMediaChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (mediaPreview) {
+      URL.revokeObjectURL(mediaPreview);
+    }
     const file = event.target.files?.[0];
     if (file) {
       setMediaFile(file);

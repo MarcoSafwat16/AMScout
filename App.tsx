@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Page, User, Post, Comment, Message, Product, CartItem, ProductVariant, UserStories, Story, Reaction, Notification } from './types';
 import AppNavBar from './components/BottomNavBar';
@@ -28,9 +29,10 @@ import LoginScreen from './components/LoginScreen';
 import SignUpScreen from './components/SignUpScreen';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 import EditProfileScreen from './components/EditProfileScreen';
-import { auth, db } from './services/firebase';
+import { auth, db, storage } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, writeBatch, query, orderBy, setDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, uploadString } from 'firebase/storage';
 
 type AuthPage = 'login' | 'signup' | 'forgotPassword';
 
@@ -73,11 +75,14 @@ const App: React.FC = () => {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [dashboardPosition, setDashboardPosition] = useState({ x: window.innerWidth / 2 - 300, y: 100 });
 
-  // --- Start Data Fetching ---
+  // --- Start Data Fetching & Presence ---
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
+        // Set user online
+        await updateDoc(userDocRef, { isOnline: true, lastSeen: serverTimestamp() });
+
         const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
           if (doc.exists()) {
             setCurrentUser({ id: doc.id, ...doc.data() } as User);
@@ -95,6 +100,34 @@ const App: React.FC = () => {
     });
     return () => unsubscribeAuth();
   }, []);
+  
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const userStatusDocRef = doc(db, "users", currentUser.id);
+
+    const handleVisibilityChange = () => {
+        if (!auth.currentUser) return;
+        if (document.visibilityState === 'hidden') {
+            updateDoc(userStatusDocRef, { isOnline: false, lastSeen: serverTimestamp() });
+        } else {
+            updateDoc(userStatusDocRef, { isOnline: true, lastSeen: serverTimestamp() });
+        }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Set offline on unload
+    window.addEventListener('beforeunload', () => {
+        if (auth.currentUser) {
+           updateDoc(userStatusDocRef, { isOnline: false, lastSeen: serverTimestamp() });
+        }
+    });
+
+    return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+}, [currentUser]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -146,8 +179,6 @@ const App: React.FC = () => {
             const data = docSnap.data();
             const user = usersMap.get(docSnap.id);
             if (!user) return null;
-            // FIX: The `story` object from Firestore has a Timestamp object, not a JS Date.
-            // Cast to `any` to allow calling `toDate()` before it's converted to the `Story` type.
             const validStories = (data.stories || []).filter((story: any) => story.timestamp?.toDate() > twentyFourHoursAgo);
             if (validStories.length === 0) return null;
             return {
@@ -185,7 +216,10 @@ const App: React.FC = () => {
       }
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (currentUser) {
+        await updateDoc(doc(db, "users", currentUser.id), { isOnline: false, lastSeen: serverTimestamp() });
+    }
     signOut(auth).catch(error => console.error("Logout failed", error));
   }
   
@@ -212,20 +246,24 @@ const App: React.FC = () => {
   
   const handleAddStory = useCallback(async (imageDataUrl: string) => {
     if (!currentUser) return;
-    // FIX: Removed incorrect type annotation. The `id` property was disallowed and the `timestamp` property had an incompatible type (Date vs Firestore's serverTimestamp). Type inference will handle this correctly for Firestore.
+    
+    const storyFileRef = ref(storage, `stories/${currentUser.id}/${Date.now()}.jpg`);
+    const snapshot = await uploadString(storyFileRef, imageDataUrl, 'data_url');
+    const downloadURL = await getDownloadURL(snapshot.ref);
+
     const newStory = {
         id: `s_${Date.now()}`,
-        contentUrl: imageDataUrl, // In a real app, upload to storage first.
+        contentUrl: downloadURL,
         contentType: 'image',
         duration: 7, // 7 seconds
         timestamp: serverTimestamp(),
     };
-    const storyRef = doc(db, "userStories", currentUser.id);
-    const docSnap = await getDoc(storyRef);
+    const storyDocRef = doc(db, "userStories", currentUser.id);
+    const docSnap = await getDoc(storyDocRef);
     if (docSnap.exists()) {
-        await updateDoc(storyRef, { stories: arrayUnion(newStory) });
+        await updateDoc(storyDocRef, { stories: arrayUnion(newStory) });
     } else {
-        await setDoc(storyRef, { stories: [newStory] });
+        await setDoc(storyDocRef, { stories: [newStory] });
     }
     handleCloseStoryCreator();
   }, [currentUser]);
@@ -242,8 +280,16 @@ const App: React.FC = () => {
   
   const handleUpdateProfile = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
+    const dataToSave = { ...updatedData };
+
+    if (dataToSave.avatarUrl && dataToSave.avatarUrl.startsWith('data:')) {
+      const avatarRef = ref(storage, `avatars/${currentUser.id}`);
+      const snapshot = await uploadString(avatarRef, dataToSave.avatarUrl, 'data_url');
+      dataToSave.avatarUrl = await getDownloadURL(snapshot.ref);
+    }
+    
     const userRef = doc(db, "users", currentUser.id);
-    await updateDoc(userRef, updatedData);
+    await updateDoc(userRef, dataToSave);
     setIsEditProfileOpen(false);
   };
 
@@ -375,11 +421,15 @@ const App: React.FC = () => {
     if (!currentUser) return;
     let imageUrl: string | undefined = undefined;
     let videoUrl: string | undefined = undefined;
+    
     if (mediaFile) {
-        const url = URL.createObjectURL(mediaFile);
-        if (mediaFile.type.startsWith('image/')) imageUrl = url;
-        else if (mediaFile.type.startsWith('video/')) videoUrl = url;
+        const mediaRef = ref(storage, `posts/${currentUser.id}/${Date.now()}_${mediaFile.name}`);
+        const snapshot = await uploadBytes(mediaRef, mediaFile);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        if (mediaFile.type.startsWith('image/')) imageUrl = downloadURL;
+        else if (mediaFile.type.startsWith('video/')) videoUrl = downloadURL;
     }
+
     const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
     const newPost = {
       authorId: currentUser.id,
@@ -400,7 +450,11 @@ const App: React.FC = () => {
 
   const handleAddReel = useCallback(async (videoFile: File, caption: string, taggedUsernames: string[]) => {
      if (!currentUser) return;
-     const videoUrl = URL.createObjectURL(videoFile);
+     
+     const mediaRef = ref(storage, `reels/${currentUser.id}/${Date.now()}_${videoFile.name}`);
+     const snapshot = await uploadBytes(mediaRef, videoFile);
+     const videoUrl = await getDownloadURL(snapshot.ref);
+
      const taggedUsers = users.filter(user => taggedUsernames.includes(user.username));
      const newReel = {
         authorId: currentUser.id,
@@ -441,6 +495,9 @@ const App: React.FC = () => {
       setIsReelsViewerOpen(true);
       return;
     }
+    if (page === Page.Messages) {
+        setIsReelsViewerOpen(false);
+    }
     setViewedProfileId(null);
     setActivePage(page);
   }, []);
@@ -465,14 +522,27 @@ const App: React.FC = () => {
     await updateDoc(postRef, { comments: arrayUnion(newComment) });
   }, [currentUser]);
 
-  const handleSendMessage = useCallback(async (messageContent: Omit<Message, 'sender' | 'id' | 'timestamp'>) => {
+  const handleSendMessage = useCallback(async (messageContent: { text?: string; stickerUrl?: string; mediaFile?: File }) => {
     if (!currentUser) return;
-    const newMessage = {
+    const newMessageData: { senderId: string, timestamp: any, text?: string, stickerUrl?: string, imageUrl?: string, videoUrl?: string } = {
       senderId: currentUser.id,
-      ...messageContent,
       timestamp: serverTimestamp(),
     };
-    await addDoc(collection(db, "groupChat"), newMessage);
+    
+    if (messageContent.text) newMessageData.text = messageContent.text;
+    if (messageContent.stickerUrl) newMessageData.stickerUrl = messageContent.stickerUrl;
+    
+    if (messageContent.mediaFile) {
+        const file = messageContent.mediaFile;
+        const mediaRef = ref(storage, `chat/${currentUser.id}/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(mediaRef, file);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+
+        if (file.type.startsWith('image/')) newMessageData.imageUrl = downloadURL;
+        else if (file.type.startsWith('video/')) newMessageData.videoUrl = downloadURL;
+    }
+    
+    await addDoc(collection(db, "groupChat"), newMessageData);
   }, [currentUser]);
 
   const handleCreateSticker = useCallback((stickerDataUrl: string) => {
@@ -579,7 +649,7 @@ const App: React.FC = () => {
         />
       }
       
-      <main className="app-main-content w-full">
+      <main className="app-main-content w-full pb-20 md:pb-0">
         {renderContent()}
       </main>
 

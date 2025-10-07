@@ -114,6 +114,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSwitchToLogin, users }) =
             points: 0,
             isAdmin: isFirstUser,
             following: [],
+            bio: '',
         };
         
         // Save the extended user profile to Firestore
