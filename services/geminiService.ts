@@ -1,17 +1,21 @@
+
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 // Ensure the API key is handled by the environment.
 // Do not hardcode or expose the API key in the client-side code.
 const API_KEY = process.env.API_KEY;
 
-if (!API_KEY) {
+let ai: GoogleGenAI | null = null;
+
+if (API_KEY) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+} else {
   console.warn("Gemini API key not found. AI features will be disabled.");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
 export const generatePostIdea = async (topic: string): Promise<string> => {
-  if (!API_KEY) {
+  if (!ai) {
     return "AI service is currently unavailable. Please check your API key setup.";
   }
 
@@ -36,7 +40,7 @@ export const generatePostIdea = async (topic: string): Promise<string> => {
 };
 
 export const removeImageBackground = async (base64ImageData: string, mimeType: string): Promise<string> => {
-  if (!API_KEY) {
+  if (!ai) {
     throw new Error("AI service is currently unavailable. Please check your API key setup.");
   }
   try {
@@ -76,7 +80,7 @@ export const removeImageBackground = async (base64ImageData: string, mimeType: s
 };
 
 export const generateChatReply = async (conversationHistory: string): Promise<{ suggestions: string[] }> => {
-  if (!API_KEY) {
+  if (!ai) {
     throw new Error("AI service is currently unavailable. Please check your API key setup.");
   }
 
